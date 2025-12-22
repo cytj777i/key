@@ -1,0 +1,1994 @@
+-- CialloUI 库 v1.0
+-- 作者：ciTiy
+-- 一个模块化的UI库，支持动态布局、滚动、搜索、按钮自动管理等功能
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local CialloUI = {}
+CialloUI.__index = CialloUI
+
+-- 默认配置
+CialloUI.CONFIG = {
+    -- 主窗口配置
+    SCALE_PERCENT = 0.8,
+    BORDER_PADDING = 10,
+    ANIMATION_TIME = 0.5,
+    IMAGE_ID = "rbxassetid://121235355180154",
+    OPEN_IMAGE_ID = "rbxassetid://98409141284289",
+    CLOSED_IMAGE_ID = "rbxassetid://136012227544450",
+    CLICKED_IMAGE_ID = "rbxassetid://132487815545217",
+    ORIGINAL_W = 1912,
+    ORIGINAL_H = 1080,
+    IMAGE_TRANSPARENCY = 0.1,
+    BORDER_RADIUS = 8,
+    BORDER_COLOR = Color3.fromRGB(0, 255, 0),
+    BORDER_WHITE_COLOR = Color3.new(1, 1, 1),
+    
+    -- 缩小按钮配置
+    MINIMIZE_BTN_SIZE = 60,
+    MINIMIZE_BTN_BORDER = 3,
+    MINIMIZE_BTN_PADDING = 4,
+    
+    -- 动画配置
+    TILT_ANGLE = 30,
+    TILT_DURATION = 0.5,
+    TOTAL_ANIMATION_TIME = 1.5,
+    
+    -- 点击特效配置
+    CLICK_EFFECT_SIZE = 26,
+    CLICK_EFFECT_DURATION = 0.8,
+    CLICK_EFFECT_COLOR = Color3.fromRGB(255, 215, 0),
+    CLICK_EFFECT_STROKE_THICKNESS = 1,
+    CLICK_EFFECT_OPACITY = 0.7,
+    
+    -- 搜索栏配置
+    SEARCH_BAR_HEIGHT = 28,
+    SEARCH_BAR_PADDING = 5,
+    INPUT_BOX_CORNER_RADIUS = 6,
+    SEARCH_BTN_WIDTH = 70,
+    SEARCH_BTN_HEIGHT = 20,
+    SEARCH_BTN_CORNER_RADIUS = 6,
+    PLACEHOLDER_TEXT = "请输入文本喵∽",
+    NO_RESULT_TEXT = "莫有任何东西呢喵∽",
+    TEXT_COLOR = Color3.new(0, 0, 0),
+    PLACEHOLDER_COLOR = Color3.new(0.6, 0.6, 0.6),
+    PLACEHOLDER_TRANSPARENCY = 0.5,
+    
+    -- 标签栏配置
+    TAB_BAR_WIDTH = 80,
+    TAB_BAR_LINE_WIDTH = 2,
+    TAB_BUTTON_HEIGHT = 28,
+    TAB_BUTTON_PADDING = 4,
+    TAB_BUTTON_SPACING = 8,
+    TAB_BUTTON_CORNER = 6,
+    
+    -- 通用界面配置
+    GENERAL_BUTTON_HEIGHT = 37,
+    GENERAL_BUTTON_CORNER_RADIUS = 20,
+    
+    -- 滑块配置
+    SLIDER_WIDTH = 0.8,
+    SLIDER_HEIGHT = 37,
+    SLIDER_SPACING = 15,
+    SLIDER_BORDER_THICKNESS = 3,
+    SLIDER_START_Y = 15,
+    
+    -- 滚动配置
+    SCROLL_SPEED = 0.5,
+    SCROLL_HANDLE_WIDTH = 15,
+    SCROLL_HANDLE_HEIGHT = 83,
+    SCROLL_HANDLE_CORNER = 9,
+    
+    -- 图片资源
+    EFFECT_IMAGE_ID = "rbxassetid://96717926040222",
+    NO_RESULT_IMAGE_ID = "rbxassetid://121075806983151",
+    NO_RESULT_IMAGE_SIZE = 40,
+    NO_RESULT_IMAGE_SPACING = 10,
+    
+    -- 公告界面配置
+    ANNOUNCEMENT_IMAGE_ID = "rbxassetid://84397888993995",
+    ANNOUNCEMENT_IMAGE_SIZE = 98,
+    ANNOUNCEMENT_IMAGE_PADDING = 3,
+    COPY_BUTTON_SIZE = UDim2.new(0, 170, 0, 50),
+    COPY_BUTTON_CORNER = 17,
+    AUTHOR_LABEL_HEIGHT = 30,
+    AUTHOR_LABEL_SIZE = 32,
+}
+
+-- UI状态管理
+CialloUI.State = {
+    UIVisible = true,
+    CurrentTab = "announcement", -- announcement, general, custom
+    Buttons = {}, -- 所有按钮的引用
+    Sliders = {}, -- 所有滑块的引用
+    Tabs = {}, -- 标签页数据
+    SearchResults = {}, -- 搜索结果
+}
+
+-- 内部状态
+local ui = {
+    screenGui = nil,
+    mainFrame = nil,
+    minimizeBtnContainer = nil,
+    searchBar = nil,
+    searchInput = nil,
+    searchButton = nil,
+    noResultContainer = nil,
+    tabBarContainer = nil,
+    generalContainer = nil,
+    generalContent = nil,
+    announcementContainer = nil,
+    scrollHandle = nil,
+    
+    -- 滚动状态
+    scrollState = {
+        isScrolling = false,
+        startY = 0,
+        lastY = 0,
+        scrollOffset = 0,
+        maxScroll = 0,
+        isContentScrolling = false,
+        contentStartY = 0,
+        contentLastY = 0,
+        contentScrollOffset = 0,
+        contentMaxScroll = 0
+    },
+    
+    -- 动画状态
+    animationState = {
+        isProcessing = false,
+        animationCompleted = false,
+        animationQueue = {},
+        currentTween = nil
+    },
+    
+    -- 拖动状态
+    dragState = {
+        isDragging = false,
+        dragStartPos = nil,
+        startFramePos = nil,
+        isDraggingMinimize = false,
+        dragStartPosMinimize = nil,
+        startFramePosMinimize = nil,
+        isDraggingHandle = false,
+        handleStartY = 0,
+        handleStartMouseY = 0
+    }
+}
+
+-- 辅助函数：创建渐变
+local function createGradient(parent, colors, rotation)
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new(colors)
+    gradient.Rotation = rotation or 0
+    gradient.Parent = parent
+    return gradient
+end
+
+-- 辅助函数：创建圆角
+local function createCorner(parent, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = parent
+    return corner
+end
+
+-- 辅助函数：创建点击特效
+local function createClickEffect(parentFrame, mousePosition, config)
+    local framePos = parentFrame.AbsolutePosition
+    local frameSize = parentFrame.AbsoluteSize
+    
+    if mousePosition.X >= framePos.X and mousePosition.X <= framePos.X + frameSize.X and
+       mousePosition.Y >= framePos.Y and mousePosition.Y <= framePos.Y + frameSize.Y then
+        
+        local relativeX = (mousePosition.X - framePos.X) / frameSize.X
+        local relativeY = (mousePosition.Y - framePos.Y) / frameSize.Y
+        
+        local clickEffect = Instance.new("Frame")
+        clickEffect.Name = "ClickEffect"
+        clickEffect.BackgroundTransparency = 1
+        clickEffect.BorderSizePixel = 0
+        clickEffect.Size = UDim2.new(0, 0, 0, 0)
+        clickEffect.AnchorPoint = Vector2.new(0.5, 0.5)
+        clickEffect.Position = UDim2.new(relativeX, 0, relativeY, 0)
+        clickEffect.ZIndex = 7
+        clickEffect.Parent = parentFrame
+        
+        local ring = Instance.new("Frame")
+        ring.Name = "Ring"
+        ring.BackgroundTransparency = 1
+        ring.Size = UDim2.new(1, 0, 1, 0)
+        ring.Parent = clickEffect
+        
+        createCorner(ring, 100)
+        
+        local ringStroke = Instance.new("UIStroke")
+        ringStroke.Color = config.CLICK_EFFECT_COLOR
+        ringStroke.Thickness = config.CLICK_EFFECT_STROKE_THICKNESS
+        ringStroke.Transparency = 1 - config.CLICK_EFFECT_OPACITY
+        ringStroke.Parent = ring
+        
+        local tweenInfo = TweenInfo.new(
+            config.CLICK_EFFECT_DURATION,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        )
+        
+        local sizeTween = TweenService:Create(
+            clickEffect,
+            tweenInfo,
+            {Size = UDim2.new(0, config.CLICK_EFFECT_SIZE, 0, config.CLICK_EFFECT_SIZE)}
+        )
+        
+        local opacityTween = TweenService:Create(
+            ringStroke,
+            tweenInfo,
+            {Transparency = 1}
+        )
+        
+        sizeTween:Play()
+        opacityTween:Play()
+        
+        sizeTween.Completed:Connect(function()
+            clickEffect:Destroy()
+        end)
+        
+        return true
+    end
+    return false
+end
+
+-- 辅助函数：创建飞行按钮特效
+local function createFlightButtonEffect(parentFrame, mousePosition, effectImageId)
+    local framePos = parentFrame.AbsolutePosition
+    local frameSize = parentFrame.AbsoluteSize
+    
+    if mousePosition.X >= framePos.X and mousePosition.X <= framePos.X + frameSize.X and
+       mousePosition.Y >= framePos.Y and mousePosition.Y <= framePos.Y + frameSize.Y then
+        
+        local relativeX = (mousePosition.X - framePos.X) / frameSize.X
+        local relativeY = (mousePosition.Y - framePos.Y) / frameSize.Y
+        
+        local effectImage = Instance.new("ImageLabel")
+        effectImage.Name = "FlightEffectImage"
+        effectImage.BackgroundTransparency = 1
+        effectImage.Size = UDim2.new(0, 20, 0, 20)
+        effectImage.AnchorPoint = Vector2.new(0.5, 0.5)
+        effectImage.Position = UDim2.new(relativeX, 0, relativeY, 0)
+        effectImage.ZIndex = 10
+        effectImage.Image = effectImageId
+        effectImage.Parent = parentFrame
+        
+        local moveDistance = 40
+        
+        local tweenInfo = TweenInfo.new(
+            0.6,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.Out
+        )
+        
+        local moveTween = TweenService:Create(effectImage, tweenInfo, {
+            Position = UDim2.new(relativeX, moveDistance, relativeY, -moveDistance),
+            ImageTransparency = 1,
+            Size = UDim2.new(0, 25, 0, 25)
+        })
+        
+        moveTween:Play()
+        
+        moveTween.Completed:Connect(function()
+            effectImage:Destroy()
+        end)
+        
+        return true
+    end
+    return false
+end
+
+-- 计算目标大小
+local function calculateTargetSize(config, viewportSize)
+    local maxW = viewportSize.X * config.SCALE_PERCENT
+    local maxH = viewportSize.Y * config.SCALE_PERCENT
+    
+    local aspectRatio = config.ORIGINAL_W / config.ORIGINAL_H
+    
+    local finalW = maxW
+    local finalH = finalW / aspectRatio
+    
+    if finalH > maxH then
+        finalH = maxH
+        finalW = finalH * aspectRatio
+    end
+    
+    return UDim2.new(0, math.floor(finalW), 0, math.floor(finalH))
+end
+
+-- 初始化UI框架
+function CialloUI:Init(config)
+    -- 合并配置
+    self.CONFIG = setmetatable(config or {}, {__index = self.CONFIG})
+    
+    -- 等待玩家加载
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+    
+    -- 1. 创建主GUI容器
+    ui.screenGui = Instance.new("ScreenGui")
+    ui.screenGui.Name = "CialloUI"
+    ui.screenGui.ResetOnSpawn = false
+    ui.screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ui.screenGui.DisplayOrder = 100
+    ui.screenGui.Parent = playerGui
+    
+    -- 2. 创建主框架
+    ui.mainFrame = Instance.new("Frame")
+    ui.mainFrame.Name = "MainFrame"
+    ui.mainFrame.BackgroundTransparency = 1
+    ui.mainFrame.Size = UDim2.new(0, 0, 0, 0)
+    ui.mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    ui.mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ui.mainFrame.ClipsDescendants = false
+    ui.mainFrame.Parent = ui.screenGui
+    
+    -- 3. 创建边框（上、下、左、右）
+    local borders = {}
+    
+    -- 上边框
+    borders.top = Instance.new("Frame")
+    borders.top.Name = "TopBorder"
+    borders.top.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    borders.top.BorderSizePixel = 0
+    borders.top.Size = UDim2.new(1, 0, 0, self.CONFIG.BORDER_PADDING)
+    borders.top.Position = UDim2.new(0, 0, 0, 0)
+    borders.top.ZIndex = 2
+    
+    createGradient(borders.top, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    })
+    
+    borders.top.ClipsDescendants = true
+    local topMask = Instance.new("Frame")
+    topMask.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    topMask.BorderSizePixel = 0
+    topMask.Size = UDim2.new(1, 0, 1, self.CONFIG.BORDER_RADIUS)
+    topMask.Position = UDim2.new(0, 0, 0, 0)
+    
+    createGradient(topMask, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    })
+    
+    topMask.Parent = borders.top
+    createCorner(topMask, self.CONFIG.BORDER_RADIUS)
+    borders.top.Parent = ui.mainFrame
+    
+    -- 下边框
+    borders.bottom = Instance.new("Frame")
+    borders.bottom.Name = "BottomBorder"
+    borders.bottom.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    borders.bottom.BorderSizePixel = 0
+    borders.bottom.Size = UDim2.new(1, 0, 0, self.CONFIG.BORDER_PADDING)
+    borders.bottom.Position = UDim2.new(0, 0, 1, -self.CONFIG.BORDER_PADDING)
+    borders.bottom.ZIndex = 2
+    
+    createGradient(borders.bottom, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    })
+    
+    borders.bottom.ClipsDescendants = true
+    local bottomMask = Instance.new("Frame")
+    bottomMask.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    bottomMask.BorderSizePixel = 0
+    bottomMask.Size = UDim2.new(1, 0, 1, self.CONFIG.BORDER_RADIUS)
+    bottomMask.Position = UDim2.new(0, 0, 0, -self.CONFIG.BORDER_RADIUS)
+    
+    createGradient(bottomMask, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    })
+    
+    bottomMask.Parent = borders.bottom
+    createCorner(bottomMask, self.CONFIG.BORDER_RADIUS)
+    borders.bottom.Parent = ui.mainFrame
+    
+    -- 左边框
+    borders.left = Instance.new("Frame")
+    borders.left.Name = "LeftBorder"
+    borders.left.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    borders.left.BorderSizePixel = 0
+    borders.left.Size = UDim2.new(0, self.CONFIG.BORDER_PADDING, 1, -self.CONFIG.BORDER_PADDING * 2)
+    borders.left.Position = UDim2.new(0, 0, 0, self.CONFIG.BORDER_PADDING)
+    borders.left.ZIndex = 2
+    
+    createGradient(borders.left, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    }, 90)
+    
+    borders.left.Parent = ui.mainFrame
+    
+    -- 右边框
+    borders.right = Instance.new("Frame")
+    borders.right.Name = "RightBorder"
+    borders.right.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+    borders.right.BorderSizePixel = 0
+    borders.right.Size = UDim2.new(0, self.CONFIG.BORDER_PADDING, 1, -self.CONFIG.BORDER_PADDING * 2)
+    borders.right.Position = UDim2.new(1, -self.CONFIG.BORDER_PADDING, 0, self.CONFIG.BORDER_PADDING)
+    borders.right.ZIndex = 2
+    
+    createGradient(borders.right, {
+        ColorSequenceKeypoint.new(0, self.CONFIG.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, self.CONFIG.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, self.CONFIG.BORDER_COLOR)
+    }, 90)
+    
+    borders.right.Parent = ui.mainFrame
+    
+    -- 4. 创建图片背景
+    local imageDisplay = Instance.new("ImageLabel")
+    imageDisplay.Name = "BackgroundImage"
+    imageDisplay.BackgroundTransparency = 1
+    imageDisplay.BorderSizePixel = 0
+    imageDisplay.Size = UDim2.new(1, 0, 1, 0)
+    imageDisplay.Position = UDim2.new(0, 0, 0, 0)
+    imageDisplay.ScaleType = Enum.ScaleType.Fit
+    imageDisplay.Image = self.CONFIG.IMAGE_ID
+    imageDisplay.ImageTransparency = self.CONFIG.IMAGE_TRANSPARENCY
+    imageDisplay.ZIndex = 1
+    imageDisplay.Parent = ui.mainFrame
+    
+    -- 5. 添加标题文字
+    local titleText = Instance.new("TextLabel")
+    titleText.Name = "TitleText"
+    titleText.Text = "Ciallo Hub～(∠・ω＜)⌒☆"
+    titleText.Font = Enum.Font.GothamBold
+    titleText.TextSize = 18
+    titleText.BackgroundTransparency = 1
+    titleText.TextColor3 = Color3.fromRGB(255, 215, 0)
+    titleText.Size = UDim2.new(0, 0, 0, 0)
+    titleText.Position = UDim2.new(0, self.CONFIG.BORDER_PADDING, 0, 0)
+    titleText.AnchorPoint = Vector2.new(0, 1)
+    titleText.TextXAlignment = Enum.TextXAlignment.Left
+    titleText.TextYAlignment = Enum.TextYAlignment.Top
+    titleText.ZIndex = 5
+    titleText.AutomaticSize = Enum.AutomaticSize.XY
+    titleText.Parent = ui.mainFrame
+    
+    local textStroke = Instance.new("UIStroke")
+    textStroke.Color = Color3.new(0.2, 0.2, 0.2)
+    textStroke.Thickness = 1.5
+    textStroke.Transparency = 0.3
+    textStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+    textStroke.Parent = titleText
+    
+    -- 6. 创建搜索栏
+    self:CreateSearchBar()
+    
+    -- 7. 创建标签栏
+    self:CreateTabBar()
+    
+    -- 8. 创建通用界面容器
+    self:CreateGeneralContainer()
+    
+    -- 9. 创建公告界面容器
+    self:CreateAnnouncementContainer()
+    
+    -- 10. 创建缩小按钮
+    self:CreateMinimizeButton()
+    
+    -- 11. 初始化滚动系统
+    self:InitScrollSystem()
+    
+    -- 12. 绑定事件
+    self:BindEvents()
+    
+    -- 13. 初始动画
+    self:PlayOpenAnimation()
+    
+    -- 14. 添加默认标签
+    self:AddTab("公告", "announcement", function()
+        self:SwitchTab("announcement")
+    end)
+    
+    self:AddTab("通用", "general", function()
+        self:SwitchTab("general")
+    end)
+    
+    -- 切换到公告界面
+    self:SwitchTab("announcement")
+    
+    return self
+end
+
+-- 创建搜索栏
+function CialloUI:CreateSearchBar()
+    local config = self.CONFIG
+    
+    -- 搜索栏容器
+    ui.searchBar = Instance.new("Frame")
+    ui.searchBar.Name = "SearchBar"
+    ui.searchBar.BackgroundColor3 = Color3.new(1, 1, 1)
+    ui.searchBar.BorderSizePixel = 0
+    ui.searchBar.Size = UDim2.new(1, -config.BORDER_PADDING * 2, 0, config.SEARCH_BAR_HEIGHT)
+    ui.searchBar.Position = UDim2.new(0, config.BORDER_PADDING, 0, config.BORDER_PADDING)
+    ui.searchBar.ZIndex = 4
+    ui.searchBar.Parent = ui.mainFrame
+    
+    createGradient(ui.searchBar, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 192, 203)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 182, 193)),
+        ColorSequenceKeypoint.new(1, Color3.new(1, 1, 1))
+    })
+    
+    -- 输入框背景
+    local inputBackground = Instance.new("Frame")
+    inputBackground.Name = "InputBackground"
+    inputBackground.BackgroundColor3 = Color3.new(1, 1, 1)
+    inputBackground.BorderSizePixel = 0
+    inputBackground.Size = UDim2.new(1, -config.SEARCH_BTN_WIDTH - config.SEARCH_BAR_PADDING * 3, 1, -config.SEARCH_BAR_PADDING * 2)
+    inputBackground.Position = UDim2.new(0, config.SEARCH_BAR_PADDING, 0, config.SEARCH_BAR_PADDING)
+    inputBackground.ZIndex = 5
+    inputBackground.Parent = ui.searchBar
+    
+    createCorner(inputBackground, config.INPUT_BOX_CORNER_RADIUS)
+    
+    -- 输入框
+    ui.searchInput = Instance.new("TextBox")
+    ui.searchInput.Name = "SearchInput"
+    ui.searchInput.BackgroundTransparency = 1
+    ui.searchInput.Size = UDim2.new(1, 0, 1, 0)
+    ui.searchInput.Position = UDim2.new(0, 0, 0, 0)
+    ui.searchInput.Text = ""
+    ui.searchInput.PlaceholderText = config.PLACEHOLDER_TEXT
+    ui.searchInput.PlaceholderColor3 = config.PLACEHOLDER_COLOR
+    ui.searchInput.TextColor3 = config.TEXT_COLOR
+    ui.searchInput.Font = Enum.Font.SourceSans
+    ui.searchInput.TextSize = 16
+    ui.searchInput.TextXAlignment = Enum.TextXAlignment.Left
+    ui.searchInput.ZIndex = 6
+    ui.searchInput.TextTransparency = config.PLACEHOLDER_TRANSPARENCY
+    ui.searchInput.Parent = inputBackground
+    
+    -- 搜索按钮
+    ui.searchButton = Instance.new("TextButton")
+    ui.searchButton.Name = "SearchButton"
+    ui.searchButton.BackgroundColor3 = Color3.new(1, 1, 1)
+    ui.searchButton.BorderSizePixel = 0
+    ui.searchButton.Size = UDim2.new(0, config.SEARCH_BTN_WIDTH, 0, config.SEARCH_BTN_HEIGHT)
+    ui.searchButton.Position = UDim2.new(1, -config.SEARCH_BTN_WIDTH - config.SEARCH_BAR_PADDING, 0.5, 0)
+    ui.searchButton.AnchorPoint = Vector2.new(0, 0.5)
+    ui.searchButton.Text = "搜索"
+    ui.searchButton.TextColor3 = Color3.new(0.1, 0.1, 0.1)
+    ui.searchButton.Font = Enum.Font.SourceSansBold
+    ui.searchButton.TextSize = 16
+    ui.searchButton.ZIndex = 5
+    ui.searchButton.Parent = ui.searchBar
+    
+    createGradient(ui.searchButton, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 223, 0)),
+        ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 235, 175)),
+        ColorSequenceKeypoint.new(0.8, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 223, 102))
+    }, 45)
+    
+    createCorner(ui.searchButton, config.SEARCH_BTN_CORNER_RADIUS)
+    
+    -- 无结果容器
+    ui.noResultContainer = Instance.new("Frame")
+    ui.noResultContainer.Name = "NoResultContainer"
+    ui.noResultContainer.BackgroundTransparency = 1
+    ui.noResultContainer.Size = UDim2.new(0, 0, 0, 0)
+    ui.noResultContainer.Position = UDim2.new(0.5, 0, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + 110)
+    ui.noResultContainer.AnchorPoint = Vector2.new(0.5, 0)
+    ui.noResultContainer.ZIndex = 4
+    ui.noResultContainer.Visible = false
+    ui.noResultContainer.AutomaticSize = Enum.AutomaticSize.XY
+    ui.noResultContainer.Parent = ui.mainFrame
+    
+    -- 无结果图片
+    local noResultImage = Instance.new("ImageLabel")
+    noResultImage.Name = "NoResultImage"
+    noResultImage.BackgroundTransparency = 1
+    noResultImage.Size = UDim2.new(0, config.NO_RESULT_IMAGE_SIZE, 0, config.NO_RESULT_IMAGE_SIZE)
+    noResultImage.Position = UDim2.new(0, 0, 0.5, 0)
+    noResultImage.AnchorPoint = Vector2.new(0, 0.5)
+    noResultImage.Image = config.NO_RESULT_IMAGE_ID
+    noResultImage.ScaleType = Enum.ScaleType.Fit
+    noResultImage.ZIndex = 4
+    noResultImage.Parent = ui.noResultContainer
+    
+    -- 无结果文本
+    local noResultText = Instance.new("TextLabel")
+    noResultText.Name = "NoResultText"
+    noResultText.BackgroundTransparency = 1
+    noResultText.Size = UDim2.new(0, 0, 0, 0)
+    noResultText.Position = UDim2.new(0, config.NO_RESULT_IMAGE_SIZE + config.NO_RESULT_IMAGE_SPACING, 0.5, 0)
+    noResultText.AnchorPoint = Vector2.new(0, 0.5)
+    noResultText.Text = ""
+    noResultText.TextColor3 = Color3.fromRGB(255, 100, 100)
+    noResultText.Font = Enum.Font.GothamBold
+    noResultText.TextSize = 30
+    noResultText.TextXAlignment = Enum.TextXAlignment.Left
+    noResultText.TextYAlignment = Enum.TextYAlignment.Center
+    noResultText.ZIndex = 4
+    noResultText.AutomaticSize = Enum.AutomaticSize.XY
+    noResultText.Parent = ui.noResultContainer
+    
+    local noResultStroke = Instance.new("UIStroke")
+    noResultStroke.Color = Color3.new(0.2, 0.2, 0.2)
+    noResultStroke.Thickness = 2
+    noResultStroke.Transparency = 0.2
+    noResultStroke.Parent = noResultText
+    
+    -- 绑定搜索事件
+    ui.searchInput:GetPropertyChangedSignal("Text"):Connect(function()
+        if ui.searchInput.Text == "" then
+            ui.noResultContainer.Visible = false
+            ui.searchInput.TextTransparency = config.PLACEHOLDER_TRANSPARENCY
+        else
+            ui.searchInput.TextTransparency = 0
+        end
+    end)
+    
+    ui.searchButton.MouseButton1Click:Connect(function()
+        local searchText = ui.searchInput.Text
+        if searchText ~= "" then
+            self:Search(searchText)
+        end
+    end)
+end
+
+-- 创建标签栏
+function CialloUI:CreateTabBar()
+    local config = self.CONFIG
+    
+    -- 标签栏容器
+    ui.tabBarContainer = Instance.new("Frame")
+    ui.tabBarContainer.Name = "TabBarContainer"
+    ui.tabBarContainer.BackgroundTransparency = 1
+    ui.tabBarContainer.Size = UDim2.new(0, config.TAB_BAR_WIDTH, 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+    ui.tabBarContainer.Position = UDim2.new(0, config.BORDER_PADDING, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+    ui.tabBarContainer.ZIndex = 4
+    ui.tabBarContainer.ClipsDescendants = false
+    ui.tabBarContainer.Parent = ui.mainFrame
+    
+    -- 白色分隔线
+    local whiteLine = Instance.new("Frame")
+    whiteLine.Name = "WhiteLine"
+    whiteLine.BackgroundColor3 = Color3.new(1, 1, 1)
+    whiteLine.BorderSizePixel = 0
+    whiteLine.Size = UDim2.new(0, config.TAB_BAR_LINE_WIDTH, 1, 0)
+    whiteLine.Position = UDim2.new(1, 0, 0, 0)
+    whiteLine.ZIndex = 4
+    whiteLine.Parent = ui.tabBarContainer
+    
+    -- 标签按钮容器
+    local tabButtonsContainer = Instance.new("Frame")
+    tabButtonsContainer.Name = "TabButtonsContainer"
+    tabButtonsContainer.BackgroundTransparency = 1
+    tabButtonsContainer.Size = UDim2.new(1, -config.TAB_BUTTON_PADDING * 2, 1, 0)
+    tabButtonsContainer.Position = UDim2.new(0, config.TAB_BUTTON_PADDING, 0, 0)
+    tabButtonsContainer.ZIndex = 5
+    tabButtonsContainer.Parent = ui.tabBarContainer
+    
+    ui.tabButtonsContainer = tabButtonsContainer
+end
+
+-- 创建通用界面容器
+function CialloUI:CreateGeneralContainer()
+    local config = self.CONFIG
+    
+    -- 通用界面容器
+    ui.generalContainer = Instance.new("Frame")
+    ui.generalContainer.Name = "GeneralContainer"
+    ui.generalContainer.BackgroundTransparency = 1
+    ui.generalContainer.Size = UDim2.new(1, -(config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH), 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+    ui.generalContainer.Position = UDim2.new(0, config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+    ui.generalContainer.ZIndex = 4
+    ui.generalContainer.Visible = false
+    ui.generalContainer.ClipsDescendants = true
+    ui.generalContainer.Parent = ui.mainFrame
+    
+    -- 通用内容容器
+    ui.generalContent = Instance.new("Frame")
+    ui.generalContent.Name = "GeneralContent"
+    ui.generalContent.BackgroundTransparency = 1
+    ui.generalContent.Size = UDim2.new(1, 0, 1, 0)
+    ui.generalContent.Position = UDim2.new(0, 0, 0, 0)
+    ui.generalContent.ZIndex = 4
+    ui.generalContent.Parent = ui.generalContainer
+end
+
+-- 创建公告界面容器
+function CialloUI:CreateAnnouncementContainer()
+    local config = self.CONFIG
+    
+    -- 公告界面容器
+    ui.announcementContainer = Instance.new("Frame")
+    ui.announcementContainer.Name = "AnnouncementContainer"
+    ui.announcementContainer.BackgroundTransparency = 1
+    ui.announcementContainer.Size = UDim2.new(1, -(config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH), 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+    ui.announcementContainer.Position = UDim2.new(0, config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+    ui.announcementContainer.ZIndex = 4
+    ui.announcementContainer.Visible = false
+    ui.announcementContainer.Parent = ui.mainFrame
+    
+    -- 作者标签
+    local authorLabel = Instance.new("TextLabel")
+    authorLabel.Name = "AuthorLabel"
+    authorLabel.BackgroundTransparency = 1
+    authorLabel.Size = UDim2.new(1, -config.BORDER_PADDING * 3, 0, config.AUTHOR_LABEL_HEIGHT)
+    authorLabel.Position = UDim2.new(0.5, 0, 0.5, -45)
+    authorLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    authorLabel.Text = "作者：ciTiy"
+    authorLabel.TextColor3 = Color3.new(0, 0, 0)
+    authorLabel.Font = Enum.Font.GothamBold
+    authorLabel.TextSize = config.AUTHOR_LABEL_SIZE
+    authorLabel.TextWrapped = true
+    authorLabel.TextXAlignment = Enum.TextXAlignment.Center
+    authorLabel.TextYAlignment = Enum.TextYAlignment.Center
+    authorLabel.ZIndex = 4
+    authorLabel.Parent = ui.announcementContainer
+    
+    local authorStroke = Instance.new("UIStroke")
+    authorStroke.Color = Color3.new(1, 1, 1)
+    authorStroke.Thickness = 2
+    authorStroke.Transparency = 0.1
+    authorStroke.Parent = authorLabel
+    
+    -- 复制按钮
+    local copyButton = Instance.new("TextButton")
+    copyButton.Name = "CopyButton"
+    copyButton.BackgroundColor3 = Color3.new(1, 1, 1)
+    copyButton.BorderSizePixel = 0
+    copyButton.Size = config.COPY_BUTTON_SIZE
+    copyButton.Position = UDim2.new(0.5, 0, 0.5, 5)
+    copyButton.AnchorPoint = Vector2.new(0.5, 0.5)
+    copyButton.Text = "点我复制QQ群喵∽"
+    copyButton.TextColor3 = Color3.new(0.1, 0.1, 0.1)
+    copyButton.Font = Enum.Font.SourceSansBold
+    copyButton.TextSize = 23
+    copyButton.ZIndex = 5
+    copyButton.Parent = ui.announcementContainer
+    
+    createGradient(copyButton, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(0.3, Color3.fromRGB(255, 182, 193)),
+        ColorSequenceKeypoint.new(0.7, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 192, 203))
+    }, 135)
+    
+    createCorner(copyButton, config.COPY_BUTTON_CORNER)
+    
+    -- 公告图片
+    local announcementImage = Instance.new("ImageLabel")
+    announcementImage.Name = "AnnouncementImage"
+    announcementImage.BackgroundTransparency = 1
+    announcementImage.Size = UDim2.new(0, config.ANNOUNCEMENT_IMAGE_SIZE, 0, config.ANNOUNCEMENT_IMAGE_SIZE)
+    announcementImage.Position = UDim2.new(1, -(config.ANNOUNCEMENT_IMAGE_SIZE + config.ANNOUNCEMENT_IMAGE_PADDING), 0.5, 0)
+    announcementImage.AnchorPoint = Vector2.new(1, 0.5)
+    announcementImage.Image = config.ANNOUNCEMENT_IMAGE_ID
+    announcementImage.ScaleType = Enum.ScaleType.Fit
+    announcementImage.ZIndex = 4
+    announcementImage.Parent = ui.announcementContainer
+    
+    -- 保存引用
+    ui.authorLabel = authorLabel
+    ui.copyButton = copyButton
+    ui.announcementImage = announcementImage
+    
+    -- 绑定复制按钮事件
+    local isCopyButtonAnimating = false
+    copyButton.MouseButton1Click:Connect(function()
+        if isCopyButtonAnimating then return end
+        
+        isCopyButtonAnimating = true
+        local originalSize = copyButton.Size
+        local tweenInfoShrink = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local shrinkTween = TweenService:Create(copyButton, tweenInfoShrink, {
+            Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset * 0.9, originalSize.Y.Scale, originalSize.Y.Offset * 0.9)
+        })
+        shrinkTween:Play()
+        
+        shrinkTween.Completed:Wait()
+        
+        local tweenInfoExpand = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        local expandTween = TweenService:Create(copyButton, tweenInfoExpand, {Size = originalSize})
+        expandTween:Play()
+        
+        expandTween.Completed:Connect(function()
+            setclipboard("1074708484")
+            
+            -- 特效
+            local effectImage = Instance.new("ImageLabel")
+            effectImage.Name = "CopyEffectImage"
+            effectImage.BackgroundTransparency = 1
+            effectImage.Size = UDim2.new(0, 25, 0, 25)
+            effectImage.AnchorPoint = Vector2.new(1, 0)
+            effectImage.Position = UDim2.new(1, 0, 0, 0)
+            effectImage.Image = config.EFFECT_IMAGE_ID
+            effectImage.ZIndex = copyButton.ZIndex + 2
+            effectImage.Parent = copyButton
+            
+            local moveTween = TweenService:Create(effectImage, TweenInfo.new(0.5), {
+                Position = UDim2.new(1, 30, 0, -30),
+                ImageTransparency = 1,
+                Size = UDim2.new(0, 15, 0, 15)
+            })
+            moveTween:Play()
+            
+            moveTween.Completed:Connect(function()
+                effectImage:Destroy()
+            end)
+            
+            task.wait(0.5)
+            isCopyButtonAnimating = false
+        end)
+    end)
+    
+    -- 公告图片点击特效
+    local clickCount = 0
+    local countdownActive = false
+    local effectActive = false
+    local originalImageId = config.ANNOUNCEMENT_IMAGE_ID
+    local newImageId = "rbxassetid://135699581983146"
+    
+    announcementImage.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if effectActive then return end
+            
+            if not countdownActive then
+                countdownActive = true
+                task.spawn(function()
+                    task.wait(30)
+                    countdownActive = false
+                    clickCount = 0
+                end)
+            end
+            
+            clickCount = clickCount + 1
+            
+            if clickCount >= 10 then
+                announcementImage.Image = newImageId
+                effectActive = true
+                task.spawn(function()
+                    task.wait(3)
+                    announcementImage.Image = originalImageId
+                    effectActive = false
+                    clickCount = 0
+                end)
+            end
+        end
+    end)
+end
+
+-- 创建缩小按钮
+function CialloUI:CreateMinimizeButton()
+    local config = self.CONFIG
+    
+    ui.minimizeBtnContainer = Instance.new("Frame")
+    ui.minimizeBtnContainer.Name = "MinimizeButton"
+    ui.minimizeBtnContainer.BackgroundTransparency = 1
+    ui.minimizeBtnContainer.Size = UDim2.new(0, config.MINIMIZE_BTN_SIZE, 0, config.MINIMIZE_BTN_SIZE)
+    ui.minimizeBtnContainer.AnchorPoint = Vector2.new(0, 0.5)
+    ui.minimizeBtnContainer.Position = UDim2.new(0, 20, 0.5, 0)
+    ui.minimizeBtnContainer.ClipsDescendants = true
+    ui.minimizeBtnContainer.Parent = ui.screenGui
+    
+    -- 边框容器
+    local minimizeBorder = Instance.new("Frame")
+    minimizeBorder.Name = "BorderContainer"
+    minimizeBorder.BackgroundColor3 = Color3.new(1, 1, 1)
+    minimizeBorder.Size = UDim2.new(1, 0, 1, 0)
+    minimizeBorder.Position = UDim2.new(0, 0, 0, 0)
+    minimizeBorder.BorderSizePixel = 0
+    minimizeBorder.Parent = ui.minimizeBtnContainer
+    
+    createGradient(minimizeBorder, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 182, 193)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 105, 180)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 192, 203))
+    })
+    
+    createCorner(minimizeBorder, 6)
+    
+    -- 内部背景
+    local innerBackground = Instance.new("Frame")
+    innerBackground.Name = "InnerBackground"
+    innerBackground.BackgroundColor3 = Color3.new(1, 1, 1)
+    innerBackground.BorderSizePixel = 0
+    innerBackground.Size = UDim2.new(1, -config.MINIMIZE_BTN_BORDER*2, 1, -config.MINIMIZE_BTN_BORDER*2)
+    innerBackground.Position = UDim2.new(0, config.MINIMIZE_BTN_BORDER, 0, config.MINIMIZE_BTN_BORDER)
+    innerBackground.Parent = minimizeBorder
+    
+    createCorner(innerBackground, 4)
+    
+    -- 内部图片
+    local minimizeImage = Instance.new("ImageLabel")
+    minimizeImage.Name = "MinimizeImage"
+    minimizeImage.BackgroundTransparency = 1
+    minimizeImage.Size = UDim2.new(1, -config.MINIMIZE_BTN_PADDING*2, 1, -config.MINIMIZE_BTN_PADDING*2)
+    minimizeImage.AnchorPoint = Vector2.new(0.5, 0.5)
+    minimizeImage.Position = UDim2.new(0.5, 0, 0.5, 0)
+    minimizeImage.ScaleType = Enum.ScaleType.Fit
+    minimizeImage.Image = config.OPEN_IMAGE_ID
+    minimizeImage.Parent = innerBackground
+    
+    ui.minimizeBorder = minimizeBorder
+    ui.minimizeImage = minimizeImage
+end
+
+-- 初始化滚动系统
+function CialloUI:InitScrollSystem()
+    local config = self.CONFIG
+    
+    -- 创建滚动手柄（只在需要时显示）
+    ui.scrollHandle = Instance.new("Frame")
+    ui.scrollHandle.Name = "ScrollHandle"
+    ui.scrollHandle.BackgroundColor3 = Color3.new(1, 1, 1)
+    ui.scrollHandle.BackgroundTransparency = 0.5
+    ui.scrollHandle.BorderSizePixel = 0
+    ui.scrollHandle.Size = UDim2.new(0, config.SCROLL_HANDLE_WIDTH, 0, config.SCROLL_HANDLE_HEIGHT)
+    ui.scrollHandle.Position = UDim2.new(1, -(config.BORDER_PADDING + 14 + config.TAB_BAR_LINE_WIDTH/2), 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + 10)
+    ui.scrollHandle.ZIndex = 10
+    ui.scrollHandle.Visible = false
+    ui.scrollHandle.Parent = ui.mainFrame
+    
+    createCorner(ui.scrollHandle, config.SCROLL_HANDLE_CORNER)
+    
+    -- 更新滚动限制
+    self:UpdateScrollLimits()
+end
+
+-- 更新滚动限制
+function CialloUI:UpdateScrollLimits()
+    if not ui.generalContainer or not ui.generalContent then return end
+    
+    local containerHeight = ui.generalContainer.AbsoluteSize.Y
+    local contentHeight = self:CalculateContentHeight()
+    
+    if contentHeight > containerHeight then
+        ui.scrollState.maxScroll = contentHeight - containerHeight
+        ui.scrollHandle.Visible = true
+    else
+        ui.scrollState.maxScroll = 0
+        ui.scrollHandle.Visible = false
+    end
+    
+    ui.scrollState.scrollOffset = math.clamp(ui.scrollState.scrollOffset, -ui.scrollState.maxScroll, 0)
+    ui.generalContent.Position = UDim2.new(0, 0, 0, ui.scrollState.scrollOffset)
+    
+    -- 更新手柄位置
+    self:UpdateScrollHandlePosition()
+end
+
+-- 计算内容高度
+function CialloUI:CalculateContentHeight()
+    local height = self.CONFIG.SLIDER_START_Y
+    local buttonCount = 0
+    
+    -- 计算通用界面中所有控件的高度
+    for _, child in pairs(ui.generalContent:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextButton") then
+            if child.Name:find("Slider") or child.Name:find("Button") then
+                buttonCount = buttonCount + 1
+                if buttonCount > 1 then
+                    height = height + self.CONFIG.SLIDER_SPACING
+                end
+                height = height + child.AbsoluteSize.Y
+            end
+        end
+    end
+    
+    return height
+end
+
+-- 更新滚动手柄位置
+function CialloUI:UpdateScrollHandlePosition()
+    if not ui.scrollHandle.Visible then return end
+    
+    local startY, endY = self:GetHandleRange()
+    local scrollProgress = -ui.scrollState.scrollOffset / ui.scrollState.maxScroll
+    
+    if ui.scrollState.maxScroll > 0 then
+        local newY = startY + scrollProgress * (endY - startY)
+        ui.scrollHandle.Position = UDim2.new(ui.scrollHandle.Position.X.Scale, ui.scrollHandle.Position.X.Offset, 0, newY)
+    end
+end
+
+-- 获取手柄滑动范围
+function CialloUI:GetHandleRange()
+    local config = self.CONFIG
+    local startY = config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + 10
+    local containerHeight = ui.generalContainer.AbsoluteSize.Y
+    local endY = startY + containerHeight - ui.scrollHandle.AbsoluteSize.Y - 10
+    return startY, math.max(startY, endY)
+end
+
+-- 绑定事件
+function CialloUI:BindEvents()
+    -- 窗口拖动事件
+    for _, border in ipairs({ui.mainFrame:FindFirstChild("TopBorder"), 
+                           ui.mainFrame:FindFirstChild("BottomBorder"),
+                           ui.mainFrame:FindFirstChild("LeftBorder"),
+                           ui.mainFrame:FindFirstChild("RightBorder")}) do
+        if border then
+            border.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    ui.dragState.isDragging = true
+                    ui.dragState.dragStartPos = input.Position
+                    ui.dragState.startFramePos = ui.mainFrame.Position
+                end
+            end)
+            
+            border.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    ui.dragState.isDragging = false
+                end
+            end)
+        end
+    end
+    
+    -- 缩小按钮拖动事件
+    ui.minimizeBorder.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ui.dragState.isDraggingMinimize = true
+            ui.dragState.dragStartPosMinimize = input.Position
+            ui.dragState.startFramePosMinimize = ui.minimizeBtnContainer.Position
+        end
+    end)
+    
+    ui.minimizeBorder.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ui.dragState.isDraggingMinimize = false
+        end
+    end)
+    
+    -- 滚动手柄拖动事件
+    ui.scrollHandle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ui.dragState.isDraggingHandle = true
+            ui.dragState.handleStartY = ui.scrollHandle.Position.Y.Offset
+            ui.dragState.handleStartMouseY = input.Position.Y
+        end
+    end)
+    
+    ui.scrollHandle.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ui.dragState.isDraggingHandle = false
+        end
+    end)
+    
+    -- 输入变化事件
+    UserInputService.InputChanged:Connect(function(input)
+        -- 主窗口拖动
+        if ui.dragState.isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - ui.dragState.dragStartPos
+            local newPosition = UDim2.new(
+                ui.dragState.startFramePos.X.Scale, 
+                ui.dragState.startFramePos.X.Offset + delta.X,
+                ui.dragState.startFramePos.Y.Scale, 
+                ui.dragState.startFramePos.Y.Offset + delta.Y
+            )
+            ui.mainFrame.Position = newPosition
+        end
+        
+        -- 缩小按钮拖动
+        if ui.dragState.isDraggingMinimize and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - ui.dragState.dragStartPosMinimize
+            local newPosition = UDim2.new(
+                ui.dragState.startFramePosMinimize.X.Scale, 
+                ui.dragState.startFramePosMinimize.X.Offset + delta.X,
+                ui.dragState.startFramePosMinimize.Y.Scale, 
+                ui.dragState.startFramePosMinimize.Y.Offset + delta.Y
+            )
+            ui.minimizeBtnContainer.Position = newPosition
+        end
+        
+        -- 滚动手柄拖动
+        if ui.dragState.isDraggingHandle and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local deltaY = input.Position.Y - ui.dragState.handleStartMouseY
+            local startY, endY = self:GetHandleRange()
+            
+            local newY = math.clamp(ui.dragState.handleStartY + deltaY, startY, endY)
+            ui.scrollHandle.Position = UDim2.new(ui.scrollHandle.Position.X.Scale, ui.scrollHandle.Position.X.Offset, 0, newY)
+            
+            -- 同步内容滚动
+            local scrollRange = endY - startY
+            if scrollRange > 0 then
+                local scrollProgress = (newY - startY) / scrollRange
+                ui.scrollState.scrollOffset = -scrollProgress * ui.scrollState.maxScroll
+                ui.scrollState.scrollOffset = math.clamp(ui.scrollState.scrollOffset, -ui.scrollState.maxScroll, 0)
+                ui.generalContent.Position = UDim2.new(0, 0, 0, ui.scrollState.scrollOffset)
+            end
+        end
+        
+        -- 内容区域滚动
+        if ui.scrollState.isContentScrolling and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local deltaY = input.Position.Y - ui.scrollState.contentLastY
+            ui.scrollState.contentLastY = input.Position.Y
+            
+            ui.scrollState.scrollOffset = ui.scrollState.scrollOffset + deltaY * self.CONFIG.SCROLL_SPEED
+            ui.scrollState.scrollOffset = math.clamp(ui.scrollState.scrollOffset, -ui.scrollState.maxScroll, 0)
+            
+            ui.generalContent.Position = UDim2.new(0, 0, 0, ui.scrollState.scrollOffset)
+            self:UpdateScrollHandlePosition()
+        end
+    end)
+    
+    -- 窗口大小变化事件
+    ui.mainFrame:GetPropertyChangedSignal("Size"):Connect(function()
+        self:UpdateSizes()
+    end)
+    
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+        if not ui.dragState.isDragging then
+            local targetSize = calculateTargetSize(self.CONFIG, workspace.CurrentCamera.ViewportSize)
+            ui.mainFrame.Size = targetSize
+        end
+    end)
+    
+    -- 通用界面滚动事件
+    ui.generalContainer.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local pos = input.Position
+            local containerPos = ui.generalContainer.AbsolutePosition
+            local containerSize = ui.generalContainer.AbsoluteSize
+            
+            -- 检查是否在滚动区域内（排除按钮区域）
+            local buttonAreaTop = containerPos.Y + self.CONFIG.SLIDER_START_Y
+            local buttonAreaBottom = containerPos.Y + self.CONFIG.SLIDER_START_Y + self:CalculateContentHeight()
+            
+            if pos.X >= containerPos.X and pos.X <= containerPos.X + containerSize.X and
+               pos.Y >= containerPos.Y and pos.Y <= containerPos.Y + containerSize.Y and
+               (pos.Y < buttonAreaTop or pos.Y > buttonAreaBottom) then
+                ui.scrollState.isContentScrolling = true
+                ui.scrollState.contentStartY = pos.Y
+                ui.scrollState.contentLastY = pos.Y
+            end
+        end
+    end)
+    
+    ui.generalContainer.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            ui.scrollState.isContentScrolling = false
+        end
+    end)
+    
+    -- 缩小按钮点击事件
+    ui.minimizeBorder.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            if not ui.dragState.isDraggingMinimize then
+                ui.minimizeImage.Image = self.CONFIG.CLICKED_IMAGE_ID
+                self:ToggleUI()
+                self:PlayMinimizeAnimation()
+            end
+        end
+    end)
+    
+    -- 点击特效绑定
+    self:BindClickEffects()
+end
+
+-- 绑定点击特效
+function CialloUI:BindClickEffects()
+    local function handleClick(input, parentFrame)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            createClickEffect(parentFrame, input.Position, self.CONFIG)
+        end
+    end
+    
+    -- 绑定主要元素的点击特效
+    local elements = {
+        ui.mainFrame,
+        ui.searchBar,
+        ui.searchButton,
+        ui.tabBarContainer,
+        ui.generalContainer,
+        ui.announcementContainer
+    }
+    
+    for _, element in ipairs(elements) do
+        if element then
+            element.InputBegan:Connect(function(input)
+                handleClick(input, element)
+            end)
+        end
+    end
+    
+    -- 特殊处理通用界面的滚动区域
+    ui.generalContainer.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local pos = input.Position
+            local containerPos = ui.generalContainer.AbsolutePosition
+            local containerSize = ui.generalContainer.AbsoluteSize
+            
+            -- 检查是否在滚动区域内（排除按钮区域）
+            local buttonAreaTop = containerPos.Y + self.CONFIG.SLIDER_START_Y
+            local buttonAreaBottom = containerPos.Y + self.CONFIG.SLIDER_START_Y + self:CalculateContentHeight()
+            
+            if pos.X >= containerPos.X and pos.X <= containerPos.X + containerSize.X and
+               pos.Y >= containerPos.Y and pos.Y <= containerPos.Y + containerSize.Y and
+               (pos.Y < buttonAreaTop or pos.Y > buttonAreaBottom) then
+                createClickEffect(ui.generalContainer, input.Position, self.CONFIG)
+            end
+        end
+    end)
+end
+
+-- 播放打开动画
+function CialloUI:PlayOpenAnimation()
+    ui.mainFrame.Size = UDim2.new(0, 0, 0, 0)
+    local targetSize = calculateTargetSize(self.CONFIG, workspace.CurrentCamera.ViewportSize)
+    
+    local tweenInfo = TweenInfo.new(self.CONFIG.ANIMATION_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    local tween = TweenService:Create(ui.mainFrame, tweenInfo, {Size = targetSize})
+    tween:Play()
+end
+
+-- 播放缩小按钮动画
+function CialloUI:PlayMinimizeAnimation()
+    if ui.animationState.currentTween then
+        ui.animationState.currentTween:Cancel()
+        ui.animationState.currentTween = nil
+    end
+    
+    ui.animationState.animationQueue = {}
+    ui.animationState.isProcessing = true
+    ui.animationState.animationCompleted = false
+    
+    -- 创建动画序列
+    local sequence = {
+        {rotation = self.CONFIG.TILT_ANGLE, duration = self.CONFIG.TILT_DURATION},
+        {rotation = -self.CONFIG.TILT_ANGLE, duration = self.CONFIG.TILT_DURATION},
+        {rotation = 0, duration = self.CONFIG.TILT_DURATION}
+    }
+    
+    local function processQueue()
+        if #sequence == 0 then
+            ui.animationState.isProcessing = false
+            ui.animationState.animationCompleted = true
+            ui.minimizeBorder.Rotation = 0
+            
+            if self.State.UIVisible then
+                ui.minimizeImage.Image = self.CONFIG.OPEN_IMAGE_ID
+            else
+                ui.minimizeImage.Image = self.CONFIG.CLOSED_IMAGE_ID
+            end
+            return
+        end
+        
+        local nextStage = table.remove(sequence, 1)
+        local tweenInfo = TweenInfo.new(nextStage.duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        
+        ui.animationState.currentTween = TweenService:Create(ui.minimizeBorder, tweenInfo, {Rotation = nextStage.rotation})
+        
+        ui.animationState.currentTween.Completed:Connect(function()
+            ui.animationState.currentTween = nil
+            processQueue()
+        end)
+        
+        ui.animationState.currentTween:Play()
+    end
+    
+    processQueue()
+end
+
+-- 切换UI可见性
+function CialloUI:ToggleUI()
+    self.State.UIVisible = not self.State.UIVisible
+    
+    if self.State.UIVisible then
+        ui.mainFrame.Visible = true
+        local targetSize = calculateTargetSize(self.CONFIG, workspace.CurrentCamera.ViewportSize)
+        local tweenInfo = TweenInfo.new(self.CONFIG.ANIMATION_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        local tween = TweenService:Create(ui.mainFrame, tweenInfo, {Size = targetSize})
+        tween:Play()
+    else
+        local tweenInfo = TweenInfo.new(self.CONFIG.ANIMATION_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.In)
+        local tween = TweenService:Create(ui.mainFrame, tweenInfo, {Size = UDim2.new(0, 0, 0, 0)})
+        tween:Play()
+        
+        task.delay(self.CONFIG.ANIMATION_TIME, function()
+            if not self.State.UIVisible then
+                ui.mainFrame.Visible = false
+            end
+        end)
+    end
+end
+
+-- 更新UI尺寸
+function CialloUI:UpdateSizes()
+    local config = self.CONFIG
+    local frameSize = ui.mainFrame.Size
+    local width = frameSize.X.Offset
+    local height = frameSize.Y.Offset
+    
+    -- 更新边框
+    local topBorder = ui.mainFrame:FindFirstChild("TopBorder")
+    local bottomBorder = ui.mainFrame:FindFirstChild("BottomBorder")
+    local leftBorder = ui.mainFrame:FindFirstChild("LeftBorder")
+    local rightBorder = ui.mainFrame:FindFirstChild("RightBorder")
+    
+    if topBorder then
+        topBorder.Size = UDim2.new(1, 0, 0, config.BORDER_PADDING)
+    end
+    if bottomBorder then
+        bottomBorder.Size = UDim2.new(1, 0, 0, config.BORDER_PADDING)
+        bottomBorder.Position = UDim2.new(0, 0, 1, -config.BORDER_PADDING)
+    end
+    if leftBorder then
+        leftBorder.Size = UDim2.new(0, config.BORDER_PADDING, 1, -config.BORDER_PADDING * 2)
+        leftBorder.Position = UDim2.new(0, 0, 0, config.BORDER_PADDING)
+    end
+    if rightBorder then
+        rightBorder.Size = UDim2.new(0, config.BORDER_PADDING, 1, -config.BORDER_PADDING * 2)
+        rightBorder.Position = UDim2.new(1, -config.BORDER_PADDING, 0, config.BORDER_PADDING)
+    end
+    
+    -- 更新标签栏
+    if ui.tabBarContainer then
+        ui.tabBarContainer.Size = UDim2.new(0, config.TAB_BAR_WIDTH, 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+        ui.tabBarContainer.Position = UDim2.new(0, config.BORDER_PADDING, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+    end
+    
+    -- 更新通用容器
+    if ui.generalContainer then
+        ui.generalContainer.Size = UDim2.new(1, -(config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH), 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+        ui.generalContainer.Position = UDim2.new(0, config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+        self:UpdateScrollLimits()
+    end
+    
+    -- 更新公告容器
+    if ui.announcementContainer then
+        ui.announcementContainer.Size = UDim2.new(1, -(config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH), 1, -(config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT + config.BORDER_PADDING))
+        ui.announcementContainer.Position = UDim2.new(0, config.TAB_BAR_WIDTH + config.BORDER_PADDING + config.TAB_BAR_LINE_WIDTH, 0, config.BORDER_PADDING + config.SEARCH_BAR_HEIGHT)
+    end
+    
+    -- 更新滚动手柄
+    if ui.scrollHandle then
+        local startY, endY = self:GetHandleRange()
+        local currentY = ui.scrollHandle.Position.Y.Offset
+        local clampedY = math.clamp(currentY, startY, endY)
+        if currentY ~= clampedY then
+            ui.scrollHandle.Position = UDim2.new(ui.scrollHandle.Position.X.Scale, ui.scrollHandle.Position.X.Offset, 0, clampedY)
+        end
+    end
+end
+
+-- 添加标签
+function CialloUI:AddTab(name, id, callback)
+    local config = self.CONFIG
+    
+    -- 计算按钮位置
+    local buttonCount = #self.State.Tabs
+    local buttonY = config.TAB_BUTTON_PADDING + (buttonCount * (config.TAB_BUTTON_HEIGHT + config.TAB_BUTTON_SPACING))
+    
+    -- 创建标签按钮
+    local tabButton = Instance.new("TextButton")
+    tabButton.Name = id .. "TabButton"
+    tabButton.BackgroundColor3 = Color3.new(1, 1, 1)
+    tabButton.BorderSizePixel = 0
+    tabButton.Size = UDim2.new(1, 0, 0, config.TAB_BUTTON_HEIGHT)
+    tabButton.Position = UDim2.new(0, 0, 0, buttonY)
+    tabButton.Text = name
+    tabButton.TextColor3 = Color3.new(0, 0, 0)
+    tabButton.Font = Enum.Font.SourceSansBold
+    tabButton.TextSize = 16
+    tabButton.TextScaled = true
+    tabButton.TextWrapped = true
+    tabButton.ZIndex = 5
+    tabButton.Parent = ui.tabButtonsContainer
+    
+    createGradient(tabButton, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 223, 0)),
+        ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 235, 175)),
+        ColorSequenceKeypoint.new(0.8, Color3.fromRGB(255, 215, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 223, 102))
+    }, 45)
+    
+    createCorner(tabButton, config.TAB_BUTTON_CORNER)
+    
+    -- 绑定点击事件
+    tabButton.MouseButton1Click:Connect(function()
+        if callback then
+            callback()
+        else
+            self:SwitchTab(id)
+        end
+    end)
+    
+    -- 绑定点击特效
+    tabButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            createClickEffect(tabButton, input.Position, config)
+        end
+    end)
+    
+    -- 保存标签信息
+    table.insert(self.State.Tabs, {
+        id = id,
+        name = name,
+        button = tabButton,
+        callback = callback
+    })
+    
+    return tabButton
+end
+
+-- 切换标签页
+function CialloUI:SwitchTab(tabId)
+    self.State.CurrentTab = tabId
+    
+    -- 隐藏所有容器
+    ui.generalContainer.Visible = false
+    ui.announcementContainer.Visible = false
+    ui.scrollHandle.Visible = false
+    
+    -- 显示选中的容器
+    if tabId == "general" then
+        ui.generalContainer.Visible = true
+        self:UpdateScrollLimits()
+    elseif tabId == "announcement" then
+        ui.announcementContainer.Visible = true
+    end
+    
+    -- 更新按钮状态
+    for _, tab in ipairs(self.State.Tabs) do
+        if tab.button then
+            if tab.id == tabId then
+                -- 激活状态
+                tab.button.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+            else
+                -- 默认状态
+                tab.button.BackgroundColor3 = Color3.new(1, 1, 1)
+            end
+        end
+    end
+end
+
+-- 搜索功能
+function CialloUI:Search(searchText)
+    local results = {}
+    
+    -- 搜索所有按钮
+    for buttonId, buttonData in pairs(self.State.Buttons) do
+        if buttonData.name:lower():find(searchText:lower()) then
+            table.insert(results, buttonData)
+        end
+    end
+    
+    -- 搜索所有标签
+    for _, tab in ipairs(self.State.Tabs) do
+        if tab.name:lower():find(searchText:lower()) then
+            table.insert(results, {
+                type = "tab",
+                name = tab.name,
+                id = tab.id,
+                callback = tab.callback
+            })
+        end
+    end
+    
+    self.State.SearchResults = results
+    
+    if #results > 0 then
+        -- 显示搜索结果
+        self:ShowSearchResults(results)
+        ui.noResultContainer.Visible = false
+    else
+        -- 显示无结果
+        ui.noResultContainer.Visible = true
+        local noResultText = ui.noResultContainer:FindFirstChild("NoResultText")
+        if noResultText then
+            noResultText.Text = self.CONFIG.NO_RESULT_TEXT
+        end
+    end
+end
+
+-- 显示搜索结果
+function CialloUI:ShowSearchResults(results)
+    -- 创建搜索结果容器
+    local resultsContainer = ui.mainFrame:FindFirstChild("SearchResultsContainer")
+    if not resultsContainer then
+        resultsContainer = Instance.new("Frame")
+        resultsContainer.Name = "SearchResultsContainer"
+        resultsContainer.BackgroundTransparency = 1
+        resultsContainer.Size = UDim2.new(1, -(self.CONFIG.TAB_BAR_WIDTH + self.CONFIG.BORDER_PADDING + self.CONFIG.TAB_BAR_LINE_WIDTH), 1, -(self.CONFIG.BORDER_PADDING + self.CONFIG.SEARCH_BAR_HEIGHT + self.CONFIG.BORDER_PADDING))
+        resultsContainer.Position = UDim2.new(0, self.CONFIG.TAB_BAR_WIDTH + self.CONFIG.BORDER_PADDING + self.CONFIG.TAB_BAR_LINE_WIDTH, 0, self.CONFIG.BORDER_PADDING + self.CONFIG.SEARCH_BAR_HEIGHT)
+        resultsContainer.ZIndex = 4
+        resultsContainer.ClipsDescendants = true
+        resultsContainer.Parent = ui.mainFrame
+        
+        local scrollContainer = Instance.new("ScrollingFrame")
+        scrollContainer.Name = "SearchScrollContainer"
+        scrollContainer.BackgroundTransparency = 1
+        scrollContainer.Size = UDim2.new(1, 0, 1, 0)
+        scrollContainer.Position = UDim2.new(0, 0, 0, 0)
+        scrollContainer.ScrollBarThickness = 6
+        scrollContainer.ScrollBarImageColor3 = Color3.new(1, 1, 1)
+        scrollContainer.Parent = resultsContainer
+        
+        local layout = Instance.new("UIListLayout")
+        layout.Padding = UDim.new(0, 5)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Parent = scrollContainer
+        
+        ui.searchResultsContainer = scrollContainer
+    end
+    
+    -- 清空现有结果
+    for _, child in pairs(ui.searchResultsContainer:GetChildren()) do
+        if child:IsA("Frame") or child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    -- 添加结果按钮
+    for i, result in ipairs(results) do
+        local resultButton = Instance.new("TextButton")
+        resultButton.Name = "Result_" .. i
+        resultButton.BackgroundColor3 = Color3.new(1, 1, 1)
+        resultButton.BorderSizePixel = 0
+        resultButton.Size = UDim2.new(1, -20, 0, 40)
+        resultButton.Position = UDim2.new(0, 10, 0, 10 + (i-1) * 45)
+        resultButton.Text = result.name
+        resultButton.TextColor3 = Color3.new(0, 0, 0)
+        resultButton.Font = Enum.Font.SourceSansBold
+        resultButton.TextSize = 16
+        resultButton.LayoutOrder = i
+        resultButton.ZIndex = 5
+        resultButton.Parent = ui.searchResultsContainer
+        
+        createGradient(resultButton, {
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 223, 0)),
+            ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 215, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 235, 175)),
+            ColorSequenceKeypoint.new(0.8, Color3.fromRGB(255, 215, 0)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 223, 102))
+        }, 45)
+        
+        createCorner(resultButton, 8)
+        
+        resultButton.MouseButton1Click:Connect(function()
+            if result.type == "tab" and result.callback then
+                result.callback()
+            elseif result.callback then
+                result.callback()
+            end
+        end)
+        
+        resultButton.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                createClickEffect(resultButton, input.Position, self.CONFIG)
+            end
+        end)
+    end
+    
+    -- 更新容器大小
+    local totalHeight = #results * 45
+    ui.searchResultsContainer.CanvasSize = UDim2.new(0, 0, 0, totalHeight)
+    
+    -- 显示搜索结果容器
+    resultsContainer.Parent.Visible = true
+    ui.generalContainer.Visible = false
+    ui.announcementContainer.Visible = false
+    ui.scrollHandle.Visible = false
+end
+
+-- 添加通用按钮（不可关闭）
+function CialloUI:AddButton(name, callback, options)
+    options = options or {}
+    local config = self.CONFIG
+    
+    -- 计算按钮位置
+    local buttonCount = 0
+    for _, child in pairs(ui.generalContent:GetChildren()) do
+        if child:IsA("TextButton") and not child.Name:find("Slider") then
+            buttonCount = buttonCount + 1
+        end
+    end
+    
+    local yPosition = config.SLIDER_START_Y + (buttonCount * (config.GENERAL_BUTTON_HEIGHT + config.SLIDER_SPACING))
+    
+    -- 创建按钮
+    local button = Instance.new("TextButton")
+    button.Name = name .. "Button"
+    button.BackgroundColor3 = Color3.new(1, 1, 1)
+    button.BorderSizePixel = 0
+    button.Size = UDim2.new(config.SLIDER_WIDTH, 0, 0, config.GENERAL_BUTTON_HEIGHT)
+    button.Position = UDim2.new(0.1, 0, 0, yPosition)
+    button.Text = name
+    button.TextColor3 = Color3.new(0, 0, 0)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 20
+    button.ZIndex = 5
+    button.Parent = ui.generalContent
+    
+    createGradient(button, {
+        ColorSequenceKeypoint.new(0, config.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, config.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, config.BORDER_COLOR)
+    })
+    
+    createCorner(button, config.GENERAL_BUTTON_CORNER_RADIUS)
+    
+    -- 绑定点击事件
+    button.MouseButton1Click:Connect(function()
+        if callback then
+            callback()
+        end
+    end)
+    
+    -- 绑定点击特效
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            createFlightButtonEffect(button, input.Position, config.EFFECT_IMAGE_ID)
+        end
+    end)
+    
+    -- 保存按钮信息
+    self.State.Buttons[name] = {
+        name = name,
+        type = "button",
+        callback = callback,
+        instance = button,
+        options = options
+    }
+    
+    -- 更新滚动限制
+    self:UpdateScrollLimits()
+    
+    return button
+end
+
+-- 添加开关按钮（可关闭）
+function CialloUI:AddToggleButton(name, initialState, callback, options)
+    options = options or {}
+    local config = self.CONFIG
+    
+    -- 计算按钮位置
+    local buttonCount = 0
+    for _, child in pairs(ui.generalContent:GetChildren()) do
+        if child:IsA("TextButton") and not child.Name:find("Slider") then
+            buttonCount = buttonCount + 1
+        end
+    end
+    
+    local yPosition = config.SLIDER_START_Y + (buttonCount * (config.GENERAL_BUTTON_HEIGHT + config.SLIDER_SPACING))
+    
+    -- 创建按钮
+    local button = Instance.new("TextButton")
+    button.Name = name .. "ToggleButton"
+    button.BackgroundColor3 = Color3.new(1, 1, 1)
+    button.BorderSizePixel = 0
+    button.Size = UDim2.new(config.SLIDER_WIDTH, 0, 0, config.GENERAL_BUTTON_HEIGHT)
+    button.Position = UDim2.new(0.1, 0, 0, yPosition)
+    button.Text = name
+    button.TextColor3 = Color3.new(0, 0, 0)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 20
+    button.TextXAlignment = Enum.TextXAlignment.Center
+    button.ZIndex = 5
+    button.Parent = ui.generalContent
+    
+    createGradient(button, {
+        ColorSequenceKeypoint.new(0, config.BORDER_COLOR),
+        ColorSequenceKeypoint.new(0.5, config.BORDER_WHITE_COLOR),
+        ColorSequenceKeypoint.new(1, config.BORDER_COLOR)
+    })
+    
+    createCorner(button, config.GENERAL_BUTTON_CORNER_RADIUS)
+    
+    -- 创建图标容器
+    local iconContainer = Instance.new("Frame")
+    iconContainer.Name = "IconContainer"
+    iconContainer.BackgroundColor3 = Color3.new(1, 1, 1)
+    iconContainer.BorderSizePixel = 0
+    iconContainer.Size = UDim2.new(0, 33, 1, -4)
+    iconContainer.Position = UDim2.new(0, 15, 0, 2)
+    iconContainer.ZIndex = 6
+    iconContainer.Parent = button
+    
+    local iconPadding = Instance.new("Frame")
+    iconPadding.Name = "IconPadding"
+    iconPadding.BackgroundTransparency = 1
+    iconPadding.Size = UDim2.new(1, -4, 1, -4)
+    iconPadding.Position = UDim2.new(0, 2, 0, 2)
+    iconPadding.ZIndex = 6
+    iconPadding.Parent = iconContainer
+    
+    local iconImage = Instance.new("ImageLabel")
+    iconImage.Name = "IconImage"
+    iconImage.BackgroundTransparency = 1
+    iconImage.Size = UDim2.new(1, 0, 1, 0)
+    iconImage.Image = options.offIcon or "rbxassetid://73463569379124"
+    iconImage.ScaleType = Enum.ScaleType.Crop
+    iconImage.ZIndex = 6
+    iconImage.Parent = iconPadding
+    
+    -- 状态管理
+    local isOn = initialState or false
+    
+    -- 绑定点击事件
+    button.MouseButton1Click:Connect(function()
+        isOn = not isOn
+        
+        -- 更新图标
+        if isOn then
+            iconImage.Image = options.onIcon or "rbxassetid://109064821314378"
+        else
+            iconImage.Image = options.offIcon or "rbxassetid://73463569379124"
+        end
+        
+        -- 执行回调
+        if callback then
+            callback(isOn)
+        end
+    end)
+    
+    -- 绑定点击特效
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            createFlightButtonEffect(button, input.Position, config.EFFECT_IMAGE_ID)
+        end
+    end)
+    
+    -- 初始化状态
+    if isOn then
+        iconImage.Image = options.onIcon or "rbxassetid://109064821314378"
+    end
+    
+    -- 保存按钮信息
+    self.State.Buttons[name] = {
+        name = name,
+        type = "toggle",
+        state = isOn,
+        callback = callback,
+        instance = button,
+        icon = iconImage,
+        options = options
+    }
+    
+    -- 更新滚动限制
+    self:UpdateScrollLimits()
+    
+    return button
+end
+
+-- 添加滑块
+function CialloUI:AddSlider(name, minValue, maxValue, defaultValue, callback, options)
+    options = options or {}
+    local config = self.CONFIG
+    
+    -- 计算滑块位置
+    local sliderCount = 0
+    for _, child in pairs(ui.generalContent:GetChildren()) do
+        if child:IsA("Frame") and child.Name:find("Slider") then
+            sliderCount = sliderCount + 1
+        end
+    end
+    
+    local yPosition = config.SLIDER_START_Y + (sliderCount * (config.SLIDER_HEIGHT + config.SLIDER_SPACING))
+    
+    -- 创建滑块容器
+    local sliderContainer = Instance.new("Frame")
+    sliderContainer.Name = name .. "Slider"
+    sliderContainer.BackgroundTransparency = 1
+    sliderContainer.Size = UDim2.new(config.SLIDER_WIDTH, 0, 0, config.SLIDER_HEIGHT)
+    sliderContainer.Position = UDim2.new(0.1, 0, 0, yPosition)
+    sliderContainer.ZIndex = 5
+    sliderContainer.Parent = ui.generalContent
+    
+    -- 滑块边框
+    local sliderBorder = Instance.new("Frame")
+    sliderBorder.Name = "SliderBorder"
+    sliderBorder.BackgroundColor3 = Color3.new(1, 1, 1)
+    sliderBorder.BorderSizePixel = 0
+    sliderBorder.Size = UDim2.new(1, 0, 1, 0)
+    sliderBorder.Position = UDim2.new(0, 0, 0, 0)
+    sliderBorder.ZIndex = 5
+    sliderBorder.Parent = sliderContainer
+    
+    createGradient(sliderBorder, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 240, 0)),
+        ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 230, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 250, 200)),
+        ColorSequenceKeypoint.new(0.8, Color3.fromRGB(255, 230, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 240, 100))
+    }, 45)
+    
+    createCorner(sliderBorder, config.GENERAL_BUTTON_CORNER_RADIUS)
+    
+    -- 内部背景
+    local innerBackground = Instance.new("Frame")
+    innerBackground.Name = "InnerBackground"
+    innerBackground.BackgroundColor3 = Color3.new(1, 1, 1)
+    innerBackground.BorderSizePixel = 0
+    innerBackground.Size = UDim2.new(1, -config.SLIDER_BORDER_THICKNESS * 2, 1, -config.SLIDER_BORDER_THICKNESS * 2)
+    innerBackground.Position = UDim2.new(0, config.SLIDER_BORDER_THICKNESS, 0, config.SLIDER_BORDER_THICKNESS)
+    innerBackground.ZIndex = 5
+    innerBackground.Parent = sliderBorder
+    
+    createCorner(innerBackground, config.GENERAL_BUTTON_CORNER_RADIUS - 2)
+    
+    -- 进度条
+    local progressBar = Instance.new("Frame")
+    progressBar.Name = "ProgressBar"
+    progressBar.BackgroundColor3 = Color3.new(1, 1, 1)
+    progressBar.BorderSizePixel = 0
+    progressBar.Size = UDim2.new(0, 0, 1, 0)
+    progressBar.Position = UDim2.new(0, 0, 0, 0)
+    progressBar.ZIndex = 6
+    progressBar.Parent = innerBackground
+    
+    createGradient(progressBar, {
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 182, 193)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(152, 251, 152)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 182, 193))
+    })
+    
+    createCorner(progressBar, config.GENERAL_BUTTON_CORNER_RADIUS - 2)
+    
+    -- 标签
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(0, 0, 0, 0)
+    label.Position = UDim2.new(0.02, 0, 0.5, 0)
+    label.AnchorPoint = Vector2.new(0, 0.5)
+    label.Text = name .. ": " .. tostring(defaultValue)
+    label.TextColor3 = Color3.new(0, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 7
+    label.AutomaticSize = Enum.AutomaticSize.XY
+    label.Parent = innerBackground
+    
+    -- 滑块逻辑
+    local currentValue = defaultValue or minValue
+    
+    local function calculateProgress(value)
+        return (value - minValue) / (maxValue - minValue)
+    end
+    
+    local function updateSlider(progress)
+        progress = math.clamp(progress, 0, 1)
+        
+        progressBar.Size = UDim2.new(progress, 0, 1, 0)
+        
+        currentValue = minValue + progress * (maxValue - minValue)
+        
+        label.Text = name .. ": " .. string.format("%.1f", currentValue)
+        
+        if callback then
+            callback(currentValue)
+        end
+    end
+    
+    updateSlider(calculateProgress(defaultValue))
+    
+    -- 点击事件
+    local isDragging = false
+    
+    local function onSliderClick(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = sliderBorder.AbsolutePosition
+            local sliderSize = sliderBorder.AbsoluteSize
+            
+            local relativeX = (mousePos.X - sliderPos.X) / sliderSize.X
+            relativeX = math.clamp(relativeX, 0, 1)
+            
+            updateSlider(relativeX)
+            
+            createClickEffect(sliderBorder, input.Position, config)
+        end
+    end
+    
+    local function onInputBegan(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+        end
+    end
+    
+    local function onInputEnded(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end
+    
+    local function onInputChanged(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local mousePos = UserInputService:GetMouseLocation()
+            local sliderPos = sliderBorder.AbsolutePosition
+            local sliderSize = sliderBorder.AbsoluteSize
+            
+            local relativeX = (mousePos.X - sliderPos.X) / sliderSize.X
+            relativeX = math.clamp(relativeX, 0, 1)
+            
+            updateSlider(relativeX)
+        end
+    end
+    
+    sliderBorder.InputBegan:Connect(function(input)
+        onInputBegan(input)
+        onSliderClick(input)
+    end)
+    
+    sliderBorder.InputEnded:Connect(onInputEnded)
+    UserInputService.InputChanged:Connect(onInputChanged)
+    
+    -- 保存滑块信息
+    self.State.Sliders[name] = {
+        name = name,
+        min = minValue,
+        max = maxValue,
+        value = currentValue,
+        callback = callback,
+        instance = sliderContainer,
+        update = updateSlider
+    }
+    
+    -- 更新滚动限制
+    self:UpdateScrollLimits()
+    
+    return sliderContainer
+end
+
+-- 清理UI
+function CialloUI:Destroy()
+    if ui.screenGui then
+        ui.screenGui:Destroy()
+    end
+    
+    -- 清理状态
+    self.State = {
+        UIVisible = true,
+        CurrentTab = "announcement",
+        Buttons = {},
+        Sliders = {},
+        Tabs = {},
+        SearchResults = {}
+    }
+    
+    -- 清理UI引用
+    ui = {
+        screenGui = nil,
+        mainFrame = nil,
+        minimizeBtnContainer = nil,
+        searchBar = nil,
+        searchInput = nil,
+        searchButton = nil,
+        noResultContainer = nil,
+        tabBarContainer = nil,
+        generalContainer = nil,
+        generalContent = nil,
+        announcementContainer = nil,
+        scrollHandle = nil
+    }
+end
+
+-- 获取UI实例
+function CialloUI:GetUI()
+    return ui.screenGui
+end
+
+-- 获取当前状态
+function CialloUI:GetState()
+    return self.State
+end
+
+return CialloUI
