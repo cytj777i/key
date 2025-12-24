@@ -2168,10 +2168,13 @@ local scrollState = {
     maxScroll = 0
 }
 
--- 计算内容总高度和最大滚动偏移
+-- 计算内容总高度和最大滚动偏移 - 修改：只计算到透视玩家按钮下方15像素
 local function updateScrollLimits()
     local containerHeight = generalContainer.AbsoluteSize.Y
-    local contentHeight = CONFIG.SLIDER_START_Y + (CONFIG.SLIDER_HEIGHT + CONFIG.SLIDER_SPACING) * 3 + CONFIG.GENERAL_BUTTON_HEIGHT * 3 + 45 + 20
+    -- 计算透视玩家按钮的底部位置（Y坐标+高度）
+    local xrayButtonBottom = xrayButton.Position.Y.Offset + xrayButton.Size.Y.Offset
+    -- 内容高度只到透视玩家按钮下方15像素
+    local contentHeight = xrayButtonBottom + 15
     
     if contentHeight > containerHeight then
         scrollState.maxScroll = contentHeight - containerHeight
@@ -2181,6 +2184,9 @@ local function updateScrollLimits()
     
     scrollState.scrollOffset = math.clamp(scrollState.scrollOffset, -scrollState.maxScroll, 0)
     generalContent.Position = UDim2.new(0, 0, 0, scrollState.scrollOffset)
+    
+    -- 根据是否有滚动空间来决定是否显示滚动手柄
+    scrollHandle.Visible = scrollState.maxScroll > 0
 end
 
 -- 通用界面滚动事件处理
@@ -2230,18 +2236,30 @@ UserInputService.InputChanged:Connect(handleScrollInputChanged)
 generalContainer:GetPropertyChangedSignal("AbsoluteSize"):Connect(updateScrollLimits)
 
 ----------------------------------------------------------------
--- 滚动手柄拖动功能
+-- 滚动手柄拖动功能 - 修改：调整滑动范围
 ----------------------------------------------------------------
 local isDraggingHandle = false
 local handleStartY = 0
 local handleStartMouseY = 0
 
--- 计算手柄可滑动范围 - 修复：确保不会超出边框
+-- 计算手柄可滑动范围 - 修改：确保不会超出边框，并计算正确的结束位置
 local function getHandleRange()
     local startY = CONFIG.BORDER_PADDING + CONFIG.SEARCH_BAR_HEIGHT + 10
     local containerHeight = generalContainer.AbsoluteSize.Y
-    local endY = startY + containerHeight - scrollHandle.AbsoluteSize.Y - 10 -- 确保不会超出底部边框
-    return startY, math.max(startY, endY) -- 确保endY不小于startY
+    local handleHeight = scrollHandle.AbsoluteSize.Y
+    
+    -- 计算可滚动的总距离
+    local scrollableHeight = containerHeight - handleHeight - 20 -- 减去上下边距
+    
+    -- 如果内容高度小于容器高度，手柄应该固定在最上方
+    if scrollState.maxScroll <= 0 then
+        return startY, startY
+    end
+    
+    -- 计算结束位置：起始位置 + 可滚动的距离
+    local endY = startY + scrollableHeight
+    
+    return startY, endY
 end
 
 scrollHandle.InputBegan:Connect(function(input)
