@@ -1,0 +1,502 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+-- 配置参数
+local CONFIG = {
+	SCALE_PERCENT = 0.72,
+	BORDER_PADDING = 12,
+	ANIMATION_TIME = 0.5,
+	FADE_IN_TIME = 1.0,
+	
+	IMAGE_ID = "rbxassetid://107669144087011",
+	ORIGINAL_W = 1024,
+	ORIGINAL_H = 1024,
+
+	-- 新增：彩蛋配置
+	EASTER_EGG_IMAGE = "rbxassetid://128677469424305",
+	EASTER_EGG_CLICKS = 10,
+	EASTER_EGG_TIME = 30,
+	CONFIRM_FLY_IMAGE = "rbxassetid://84648998510367",
+	
+	TEXT_COLOR = Color3.new(0, 0, 0),
+	BUTTON_COLOR = Color3.fromRGB(255, 192, 203),
+	BUTTON_TEXT_COLOR = Color3.new(0, 0, 0),
+	STROKE_COLOR = Color3.new(1, 1, 1)
+}
+
+-- 等待玩家加载
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 1. 创建主GUI容器
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ImageLoaderGUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 100
+screenGui.Parent = playerGui
+
+-- 2. 创建主框架
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "ImageFrame"
+mainFrame.BackgroundTransparency = 1
+mainFrame.Size = UDim2.new(0, 0, 0, 0)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.Parent = screenGui
+
+-- 3. 创建黑色背景
+local background = Instance.new("ImageLabel")
+background.Name = "BackgroundBorder"
+background.BackgroundColor3 = Color3.new(0, 0, 0)
+background.BackgroundTransparency = 0.5
+background.BorderSizePixel = 0
+background.Size = UDim2.new(1, 0, 1, 0)
+background.AnchorPoint = Vector2.new(0.5, 0.5)
+background.Position = UDim2.new(0.5, 0, 0.5, 0)
+background.Parent = mainFrame
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 14)
+uiCorner.Parent = background
+
+local bgStroke = Instance.new("UIStroke")
+bgStroke.Color = CONFIG.STROKE_COLOR
+bgStroke.Thickness = 2.4
+bgStroke.Transparency = 1
+bgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+bgStroke.Parent = background
+
+-- 4.1 标题文字
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Text = "欢迎使用Ciallo Hub～(∠・ω＜)⌒☆"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 22
+titleLabel.TextColor3 = CONFIG.TEXT_COLOR
+titleLabel.BackgroundColor3 = Color3.new(1, 1, 1)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Size = UDim2.new(0.8, 0, 0.12, 0)
+titleLabel.Position = UDim2.new(0.5, 0, 0.15, 0)
+titleLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+titleLabel.TextTransparency = 1
+titleLabel.ZIndex = 3
+titleLabel.Parent = background
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 7)
+titleCorner.Parent = titleLabel
+
+-- 4.2 中间图片显示
+local imageDisplay = Instance.new("ImageLabel")
+imageDisplay.Name = "ContentImage"
+imageDisplay.BackgroundTransparency = 1
+imageDisplay.Size = UDim2.new(0.7, 0, 0.5, 0)
+imageDisplay.Position = UDim2.new(0.5, 0, 0.5, 0)
+imageDisplay.AnchorPoint = Vector2.new(0.5, 0.5)
+imageDisplay.ScaleType = Enum.ScaleType.Fit
+imageDisplay.Image = CONFIG.IMAGE_ID
+imageDisplay.ImageTransparency = 1
+imageDisplay.ZIndex = 2
+imageDisplay.Parent = background
+
+-- 4.3 确认按钮容器
+local confirmButtonContainer = Instance.new("Frame")
+confirmButtonContainer.Name = "ConfirmButtonContainer"
+confirmButtonContainer.BackgroundTransparency = 1
+confirmButtonContainer.Size = UDim2.new(0, 100, 0, 32)
+confirmButtonContainer.Position = UDim2.new(0.5, 0, 0.85, 0)
+confirmButtonContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+confirmButtonContainer.ZIndex = 3
+confirmButtonContainer.Parent = background
+
+-- 确认按钮背景
+local confirmButtonBG = Instance.new("Frame")
+confirmButtonBG.Name = "ConfirmButtonBG"
+confirmButtonBG.BackgroundColor3 = CONFIG.BUTTON_COLOR
+confirmButtonBG.BackgroundTransparency = 1
+confirmButtonBG.Size = UDim2.new(1, 0, 1, 0)
+confirmButtonBG.Position = UDim2.new(0, 0, 0, 0)
+confirmButtonBG.ZIndex = 4
+confirmButtonBG.Parent = confirmButtonContainer
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 8)
+btnCorner.Parent = confirmButtonBG
+
+local btnStroke = Instance.new("UIStroke")
+btnStroke.Color = CONFIG.STROKE_COLOR
+btnStroke.Thickness = 2
+btnStroke.Transparency = 1
+btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+btnStroke.Parent = confirmButtonBG
+
+local confirmButtonShadow = Instance.new("ImageLabel")
+confirmButtonShadow.Name = "ConfirmButtonShadow"
+confirmButtonShadow.BackgroundTransparency = 1
+confirmButtonShadow.Image = "rbxassetid://1316045217"
+confirmButtonShadow.ScaleType = Enum.ScaleType.Slice
+confirmButtonShadow.SliceCenter = Rect.new(10, 10, 118, 118)
+confirmButtonShadow.ImageTransparency = 1
+confirmButtonShadow.Size = UDim2.new(1, 10, 1, 10)
+confirmButtonShadow.Position = UDim2.new(0, -5, 0, -5)
+confirmButtonShadow.ZIndex = 3
+confirmButtonShadow.Parent = confirmButtonBG
+
+local confirmButtonText = Instance.new("TextLabel")
+confirmButtonText.Name = "ConfirmButtonText"
+confirmButtonText.Text = "确定"
+confirmButtonText.Font = Enum.Font.GothamBold
+confirmButtonText.TextSize = 19
+confirmButtonText.TextColor3 = CONFIG.BUTTON_TEXT_COLOR
+confirmButtonText.BackgroundTransparency = 1
+confirmButtonText.Size = UDim2.new(1, 0, 1, 0)
+confirmButtonText.Position = UDim2.new(0, 0, 0, 0)
+confirmButtonText.TextTransparency = 1
+confirmButtonText.ZIndex = 5
+confirmButtonText.Parent = confirmButtonContainer
+
+local confirmButtonHitbox = Instance.new("TextButton")
+confirmButtonHitbox.Name = "ConfirmButtonHitbox"
+confirmButtonHitbox.Text = ""
+confirmButtonHitbox.BackgroundTransparency = 1
+confirmButtonHitbox.Size = UDim2.new(1, 0, 1, 0)
+confirmButtonHitbox.Position = UDim2.new(0, 0, 0, 0)
+confirmButtonHitbox.ZIndex = 6
+confirmButtonHitbox.AutoButtonColor = false
+confirmButtonHitbox.Parent = confirmButtonContainer
+
+-- 5. 右上角关闭按钮容器
+local closeButtonContainer = Instance.new("Frame")
+closeButtonContainer.Name = "CloseButtonContainer"
+closeButtonContainer.BackgroundTransparency = 1
+closeButtonContainer.Size = UDim2.new(0, 32, 0, 32)
+closeButtonContainer.Position = UDim2.new(1, -16, 0, 16)
+closeButtonContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+closeButtonContainer.ZIndex = 4
+closeButtonContainer.Parent = background
+
+local closeButtonBG = Instance.new("Frame")
+closeButtonBG.Name = "CloseButtonBG"
+closeButtonBG.BackgroundColor3 = Color3.new(0, 0, 0)
+closeButtonBG.BackgroundTransparency = 1
+closeButtonBG.Size = UDim2.new(1, 0, 1, 0)
+closeButtonBG.Position = UDim2.new(0, 0, 0, 0)
+closeButtonBG.ZIndex = 5
+closeButtonBG.Parent = closeButtonContainer
+
+local closeBtnCorner = Instance.new("UICorner")
+closeBtnCorner.CornerRadius = UDim.new(0, 16)
+closeBtnCorner.Parent = closeButtonBG
+
+local closeBtnStroke = Instance.new("UIStroke")
+closeBtnStroke.Color = CONFIG.STROKE_COLOR
+closeBtnStroke.Thickness = 2.4
+closeBtnStroke.Transparency = 1
+closeBtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+closeBtnStroke.Parent = closeButtonBG
+
+local closeButtonText = Instance.new("TextLabel")
+closeButtonText.Name = "CloseButtonText"
+closeButtonText.Text = "×"
+closeButtonText.Font = Enum.Font.GothamBlack
+closeButtonText.TextSize = 27
+closeButtonText.TextColor3 = Color3.new(1, 1, 1)
+closeButtonText.BackgroundTransparency = 1
+closeButtonText.Size = UDim2.new(1, 0, 1, 0)
+closeButtonText.Position = UDim2.new(0, 0, 0, 0)
+closeButtonText.TextTransparency = 1
+closeButtonText.ZIndex = 6
+closeButtonText.Parent = closeButtonContainer
+
+local closeButtonHitbox = Instance.new("TextButton")
+closeButtonHitbox.Name = "CloseButtonHitbox"
+closeButtonHitbox.Text = ""
+closeButtonHitbox.BackgroundTransparency = 1
+closeButtonHitbox.Size = UDim2.new(1, 0, 1, 0)
+closeButtonHitbox.Position = UDim2.new(0, 0, 0, 0)
+closeButtonHitbox.ZIndex = 7
+closeButtonHitbox.AutoButtonColor = false
+closeButtonHitbox.Parent = closeButtonContainer
+
+-- 新增：点击图片的点击追踪系统
+local imageClickData = {
+	count = 0,
+	firstClickTime = 0,
+	isAnimating = false,
+	originalImage = CONFIG.IMAGE_ID,
+	originalRotation = 0,
+	originalPosition = UDim2.new(0.5, 0, 0.5, 0)
+}
+
+-- 新增：倾斜动画函数
+local function playTiltAnimation()
+	if imageClickData.isAnimating then return end
+	imageClickData.isAnimating = true
+	
+	-- 切换到彩蛋图片
+	imageDisplay.Image = CONFIG.EASTER_EGG_IMAGE
+	
+	-- 动画参数
+	local tiltInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
+	local offsetX = 30 -- 水平偏移像素
+	
+	-- 执行三组倾斜动画
+	for group = 1, 3 do
+		-- 右倾斜30度
+		TweenService:Create(imageDisplay, tiltInfo, {
+			Rotation = 30,
+			Position = UDim2.new(0.5, offsetX, 0.5, 0)
+		}):Play()
+		task.wait(0.5)
+		
+		-- 左倾斜30度
+		TweenService:Create(imageDisplay, tiltInfo, {
+			Rotation = -30,
+			Position = UDim2.new(0.5, -offsetX, 0.5, 0)
+		}):Play()
+		task.wait(0.5)
+	end
+	
+	-- 恢复原始状态
+	TweenService:Create(imageDisplay, tiltInfo, {
+		Rotation = imageClickData.originalRotation,
+		Position = imageClickData.originalPosition
+	}):Play()
+	task.wait(0.5)
+	
+	-- 恢复原图并重置计数
+	imageDisplay.Image = imageClickData.originalImage
+	imageClickData.isAnimating = false
+	imageClickData.count = 0
+end
+
+-- 新增：点击图片处理函数
+local function handleImageClick()
+	if imageClickData.isAnimating then return end
+	
+	local currentTime = tick()
+	
+	-- 检查是否超时或首次点击
+	if imageClickData.count == 0 or (currentTime - imageClickData.firstClickTime) > CONFIG.EASTER_EGG_TIME then
+		imageClickData.count = 1
+		imageClickData.firstClickTime = currentTime
+	else
+		imageClickData.count = imageClickData.count + 1
+		
+		-- 检查是否达到10次点击
+		if imageClickData.count >= CONFIG.EASTER_EGG_CLICKS then
+			playTiltAnimation()
+		end
+	end
+end
+
+-- 新增：为图片添加点击检测器
+local imageClickDetector = Instance.new("TextButton")
+imageClickDetector.Name = "ImageClickDetector"
+imageClickDetector.BackgroundTransparency = 1
+imageClickDetector.Text = ""
+imageClickDetector.Size = UDim2.new(1, 0, 1, 0)
+imageClickDetector.ZIndex = 10
+imageClickDetector.Parent = imageDisplay
+imageClickDetector.MouseButton1Click:Connect(handleImageClick)
+
+-- 按钮点击动画
+local function playButtonClickAnimation()
+	local originalSize = confirmButtonContainer.Size
+	local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local scaleFactor = 0.8
+	local scaledWidth = originalSize.Width.Offset * scaleFactor
+	local scaledHeight = originalSize.Height.Offset * scaleFactor
+	
+	TweenService:Create(confirmButtonContainer, tweenInfo, {
+		Size = UDim2.new(0, scaledWidth, 0, scaledHeight)
+	}):Play()
+	
+	task.wait(0.1)
+	
+	TweenService:Create(confirmButtonContainer, tweenInfo, {
+		Size = originalSize
+	}):Play()
+end
+
+-- 新增：关闭按钮点击动画
+local function playCloseButtonClickAnimation()
+	local originalSize = closeButtonContainer.Size
+	local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local scaleFactor = 0.8
+	local scaledWidth = originalSize.Width.Offset * scaleFactor
+	local scaledHeight = originalSize.Height.Offset * scaleFactor
+	
+	TweenService:Create(closeButtonContainer, tweenInfo, {
+		Size = UDim2.new(0, scaledWidth, 0, scaledHeight)
+	}):Play()
+	
+	task.wait(0.1)
+	
+	TweenService:Create(closeButtonContainer, tweenInfo, {
+		Size = originalSize
+	}):Play()
+end
+
+-- 新增：确定按钮飞出的图片效果
+local function playConfirmButtonEffect()
+	-- 创建飞出的小图片
+	local flyImage = Instance.new("ImageLabel")
+	flyImage.Name = "FlyImage"
+	flyImage.Image = CONFIG.CONFIRM_FLY_IMAGE
+	flyImage.BackgroundTransparency = 1
+	flyImage.Size = UDim2.new(0, 18, 0, 18)
+	flyImage.AnchorPoint = Vector2.new(0.5, 0.5)
+	flyImage.Position = UDim2.new(1, 0, 0, 0) -- 按钮右上角
+	flyImage.ZIndex = 10
+	flyImage.Parent = confirmButtonContainer
+	
+	-- 发射动画
+	local flyInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local targetDistance = 45 -- 发射距离
+	
+	TweenService:Create(flyImage, flyInfo, {
+		Position = UDim2.new(1, targetDistance, 0, 0),
+		ImageTransparency = 1
+	}):Play()
+	
+	task.wait(0.5)
+	flyImage:Destroy()
+end
+
+-- 新增：执行外部UI脚本的函数
+local function executeScripts()
+    print("开始执行外部UI脚本...")
+    
+    -- 第一个UI
+    local success1, error1 = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/cytj777i/key/e9a729c430cb2a73a230f1493a8c8171c306fa83/%F0%9F%A4%AB"))()
+    end)
+    
+    if not success1 then
+        warn("第一个UI加载失败:", error1)
+    else
+        print("第一个UI加载成功")
+    end
+    
+    -- 第二个UI
+    local success2, error2 = pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/cytj777i/key/9fd33028334181dcb96e1f45e5207ef965cd3c91/ciallo%20ui"))()
+    end)
+    
+    if not success2 then
+        warn("第二个UI加载失败:", error2)
+    else
+        print("第二个UI加载成功")
+    end
+end
+
+-- 修改后的确认按钮点击事件
+confirmButtonHitbox.MouseButton1Click:Connect(function()
+	print("点击了确认按钮")
+	playButtonClickAnimation()
+	playConfirmButtonEffect()
+	
+	task.wait(0.2)
+	
+	-- 执行外部UI脚本
+	executeScripts()
+	
+	-- 关闭当前GUI
+	local closeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(mainFrame, closeInfo, {Size = UDim2.new(0,0,0,0)}):Play()
+	
+	task.wait(0.3)
+	screenGui:Destroy()
+end)
+
+-- 关闭按钮点击事件
+closeButtonHitbox.MouseButton1Click:Connect(function()
+	print("点击了关闭按钮")
+	playCloseButtonClickAnimation()
+	
+	task.wait(0.2)
+	
+	local closeInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(mainFrame, closeInfo, {Size = UDim2.new(0,0,0,0)}):Play()
+	task.wait(0.3)
+	screenGui:Destroy()
+end)
+
+-- 鼠标悬停效果
+confirmButtonHitbox.MouseEnter:Connect(function()
+	confirmButtonBG.BackgroundColor3 = Color3.fromRGB(255, 182, 193)
+end)
+
+confirmButtonHitbox.MouseLeave:Connect(function()
+	confirmButtonBG.BackgroundColor3 = CONFIG.BUTTON_COLOR
+end)
+
+closeButtonHitbox.MouseEnter:Connect(function()
+	closeButtonBG.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+end)
+
+closeButtonHitbox.MouseLeave:Connect(function()
+	closeButtonBG.BackgroundColor3 = Color3.new(0, 0, 0)
+end)
+
+-- 计算目标大小
+local function calculateTargetSize()
+	local viewportSize = workspace.CurrentCamera.ViewportSize
+	local maxW = viewportSize.X * CONFIG.SCALE_PERCENT
+	local maxH = viewportSize.Y * CONFIG.SCALE_PERCENT
+	local aspectRatio = 1.3
+	
+	local finalW = maxW
+	local finalH = finalW / aspectRatio
+	
+	if finalH > maxH then
+		finalH = maxH
+		finalW = finalH * aspectRatio
+	end
+	
+	return UDim2.new(0, math.floor(finalW), 0, math.floor(finalH))
+end
+
+local function updateSize()
+	local targetSize = calculateTargetSize()
+	mainFrame.Size = targetSize
+end
+
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateSize)
+
+-- 动画逻辑
+local function playAnimations()
+	mainFrame.Size = UDim2.new(0, 0, 0, 0)
+	local targetSize = calculateTargetSize()
+
+	local popInfo = TweenInfo.new(CONFIG.ANIMATION_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	local popTween = TweenService:Create(mainFrame, popInfo, {Size = targetSize})
+	popTween:Play()
+
+	task.wait(CONFIG.ANIMATION_TIME * 0.6)
+
+	local fadeInfo = TweenInfo.new(CONFIG.FADE_IN_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	TweenService:Create(titleLabel, fadeInfo, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+	TweenService:Create(imageDisplay, fadeInfo, {ImageTransparency = 0}):Play()
+	TweenService:Create(confirmButtonBG, fadeInfo, {BackgroundTransparency = 0}):Play()
+	TweenService:Create(btnStroke, fadeInfo, {Transparency = 0}):Play()
+	TweenService:Create(confirmButtonShadow, fadeInfo, {ImageTransparency = 0.3}):Play()
+	TweenService:Create(confirmButtonText, fadeInfo, {TextTransparency = 0}):Play()
+	TweenService:Create(closeButtonBG, fadeInfo, {BackgroundTransparency = 0}):Play()
+	TweenService:Create(closeBtnStroke, fadeInfo, {Transparency = 0}):Play()
+	TweenService:Create(closeButtonText, fadeInfo, {TextTransparency = 0}):Play()
+	TweenService:Create(bgStroke, fadeInfo, {Transparency = 0}):Play()
+end
+
+-- 运行
+playAnimations()
+
+return function()
+	if screenGui then
+		screenGui:Destroy()
+	end
+end
