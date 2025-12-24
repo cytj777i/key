@@ -1,0 +1,251 @@
+-- 本地脚本，建议放在StarterPlayerScripts或PlayerScripts中
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 等待PlayerGui加载完成
+if not playerGui:IsA("PlayerGui") then
+	playerGui = player:WaitForChild("PlayerGui", 5)
+end
+
+-- 创建ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CustomNotification"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global  -- 改为Global确保全局覆盖
+screenGui.IgnoreGuiInset = true  -- 忽略GUI插边，确保全屏显示
+screenGui.DisplayOrder = 99999  -- 设置极高的显示顺序确保覆盖其他UI
+screenGui.Parent = playerGui
+
+-- 创建主框架
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "NotificationFrame"
+mainFrame.AnchorPoint = Vector2.new(1, 1)  -- 右下角锚点
+mainFrame.Position = UDim2.new(1.3, 0, 1, -20)  -- 初始位置在屏幕外右侧（更远）
+mainFrame.Size = UDim2.new(0, 280, 0, 100)  -- 缩小尺寸
+mainFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)  -- 白色背景
+mainFrame.BackgroundTransparency = 1  -- 完全透明，让边框和内部框架显示
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = false  -- 允许边框溢出
+mainFrame.ZIndex = 1000  -- 设置高ZIndex
+
+-- 创建渐变边框效果
+local borderGradient = Instance.new("UIGradient")
+borderGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 182, 193)),  -- 浅粉色
+	ColorSequenceKeypoint.new(0.3, Color3.fromRGB(255, 240, 245)),  -- 粉白色
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(255, 240, 245)),  -- 粉白色
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 182, 193))  -- 浅粉色
+})
+borderGradient.Rotation = 45
+
+-- 创建圆角边框
+local borderFrame = Instance.new("Frame")
+borderFrame.Name = "BorderFrame"
+borderFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+borderFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+borderFrame.Size = UDim2.new(1, 8, 1, 8)  -- 增大边框，上下左右各超出4像素
+borderFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+borderFrame.BackgroundTransparency = 0
+borderFrame.BorderSizePixel = 0
+borderFrame.ZIndex = 999  -- 低于主框架但高于其他UI
+
+-- 应用渐变
+borderGradient.Parent = borderFrame
+
+-- 添加边框圆角
+local borderCorner = Instance.new("UICorner")
+borderCorner.CornerRadius = UDim.new(0, 16)  -- 增大圆角，确保圆角效果明显
+borderCorner.Parent = borderFrame
+
+borderFrame.Parent = mainFrame
+
+-- 创建内部白色背景
+local innerFrame = Instance.new("Frame")
+innerFrame.Name = "InnerFrame"
+innerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+innerFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+innerFrame.Size = UDim2.new(1, -8, 1, -8)  -- 对应边框的增大
+innerFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+innerFrame.BackgroundTransparency = 0.1
+innerFrame.BorderSizePixel = 0
+innerFrame.ZIndex = 1001  -- 高于边框
+
+-- 内部圆角
+local innerCorner = Instance.new("UICorner")
+innerCorner.CornerRadius = UDim.new(0, 8)  -- 缩小圆角
+innerCorner.Parent = innerFrame
+
+innerFrame.Parent = mainFrame
+
+-- 创建左侧图片容器
+local imageContainer = Instance.new("Frame")
+imageContainer.Name = "ImageContainer"
+imageContainer.Position = UDim2.new(0, 10, 0.5, 0)  -- 调整位置
+imageContainer.AnchorPoint = Vector2.new(0, 0.5)
+imageContainer.Size = UDim2.new(0, 70, 0, 70)  -- 缩小尺寸
+imageContainer.BackgroundTransparency = 1
+imageContainer.BorderSizePixel = 0
+imageContainer.ZIndex = 1002  -- 高于背景
+
+-- 添加图片
+local imageLabel = Instance.new("ImageLabel")
+imageLabel.Name = "ContentImage"
+imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+imageLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+imageLabel.Size = UDim2.new(1, 0, 1, 0)
+imageLabel.BackgroundTransparency = 1
+imageLabel.BorderSizePixel = 0
+imageLabel.Image = "rbxassetid://126493865375517"  -- 更换图片ID
+imageLabel.ScaleType = Enum.ScaleType.Fit
+imageLabel.ZIndex = 1003  -- 高于容器
+
+-- 图片圆角
+local imageCorner = Instance.new("UICorner")
+imageCorner.CornerRadius = UDim.new(0, 6)  -- 缩小圆角
+imageCorner.Parent = imageLabel
+
+imageLabel.Parent = imageContainer
+imageContainer.Parent = innerFrame
+
+-- 创建右侧文本容器
+local textContainer = Instance.new("Frame")
+textContainer.Name = "TextContainer"
+textContainer.Position = UDim2.new(0, 90, 0, 10)  -- 调整位置
+textContainer.Size = UDim2.new(0, 175, 0, 60)  -- 调整尺寸
+textContainer.BackgroundTransparency = 1
+textContainer.BorderSizePixel = 0
+textContainer.ZIndex = 1002  -- 与图片容器同级
+
+-- 主文本
+local mainText = Instance.new("TextLabel")
+mainText.Name = "MainText"
+mainText.Position = UDim2.new(0, 0, 0, 0)
+mainText.Size = UDim2.new(1, 0, 0, 40)  -- 调整高度
+mainText.BackgroundTransparency = 1
+mainText.BorderSizePixel = 0
+mainText.Text = "Ciallo～(∠・ω＜)⌒☆"
+mainText.TextColor3 = Color3.fromRGB(0, 0, 0)  -- 黑色文字
+mainText.TextScaled = true
+mainText.TextWrapped = true
+mainText.Font = Enum.Font.GothamBold
+mainText.TextSize = 20  -- 缩小字体
+mainText.TextXAlignment = Enum.TextXAlignment.Left
+mainText.TextYAlignment = Enum.TextYAlignment.Center
+mainText.ZIndex = 1003  -- 高于容器
+mainText.Parent = textContainer
+
+-- 金色小字
+local subText = Instance.new("TextLabel")
+subText.Name = "SubText"
+subText.Position = UDim2.new(0, 0, 0, 45)  -- 调整位置
+subText.Size = UDim2.new(1, 0, 0, 15)  -- 调整高度
+subText.BackgroundTransparency = 1
+subText.BorderSizePixel = 0
+subText.Text = "ciTiy制作-永久免费永远跑路"  -- 修改文本
+subText.TextColor3 = Color3.fromRGB(255, 215, 0)  -- 金色
+subText.TextScaled = true
+subText.Font = Enum.Font.Gotham
+subText.TextSize = 12  -- 缩小字体
+subText.TextXAlignment = Enum.TextXAlignment.Left
+subText.ZIndex = 1003  -- 高于容器
+subText.Parent = textContainer
+
+textContainer.Parent = innerFrame
+
+-- 将主框架添加到ScreenGui
+mainFrame.Parent = screenGui
+
+-- 创建一个全局变量来跟踪UI是否正在显示，防止重复创建
+if not _G.CustomNotificationActive then
+	_G.CustomNotificationActive = true
+else
+	-- 如果已经有UI在显示，直接返回
+	return screenGui
+end
+
+-- 滑入动画
+local slideInTween = TweenService:Create(
+	mainFrame,
+	TweenInfo.new(
+		1.0,  -- 延长滑入时间
+		Enum.EasingStyle.Quint,  -- 缓动样式
+		Enum.EasingDirection.Out  -- 缓动方向
+	),
+	{Position = UDim2.new(1, -20, 1, -20)}  -- 最终位置
+)
+
+-- 显示UI
+coroutine.wrap(function()
+	-- 等待一帧确保所有元素已加载
+	task.wait(0.2)
+	
+	-- 滑入动画
+	slideInTween:Play()
+	slideInTween.Completed:Wait()
+	
+	-- 上下浮动一次
+	local floatUpTween = TweenService:Create(
+		mainFrame,
+		TweenInfo.new(
+			0.2,  -- 延长向上浮动时间
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.Out
+		),
+		{Position = UDim2.new(1, -20, 1, -30)}  -- 向上移动10像素
+	)
+	
+	local floatDownTween = TweenService:Create(
+		mainFrame,
+		TweenInfo.new(
+			0.2,  -- 延长向下浮动时间
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		),
+		{Position = UDim2.new(1, -20, 1, -20)}  -- 回到原位
+	)
+	
+	-- 执行浮动动画
+	floatUpTween:Play()
+	floatUpTween.Completed:Wait()
+	floatDownTween:Play()
+	floatDownTween.Completed:Wait()
+	
+	-- 等待更久
+	task.wait(1.0)  -- 延长停留时间
+	
+	-- 二次上下浮动
+	floatUpTween:Play()
+	floatUpTween.Completed:Wait()
+	floatDownTween:Play()
+	floatDownTween.Completed:Wait()
+	
+	-- 等待更久
+	task.wait(1.0)  -- 再次延长停留时间
+	
+	-- 向右滑出消失
+	local slideOutTween = TweenService:Create(
+		mainFrame,
+		TweenInfo.new(
+			1.0,  -- 延长滑出时间
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		),
+		{Position = UDim2.new(1.5, 0, 1, -20)}  -- 向右滑出屏幕
+	)
+	
+	slideOutTween:Play()
+	slideOutTween.Completed:Wait()
+	
+	-- 清理全局变量
+	_G.CustomNotificationActive = false
+	
+	-- 销毁UI
+	screenGui:Destroy()
+end)()
+
+-- 返回ScreenGui以便外部控制
+return screenGui
